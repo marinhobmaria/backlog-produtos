@@ -15,7 +15,7 @@ interface SyncChartProps {
 
 export function SyncChart({ data }: SyncChartProps) {
   return (
-    <div className="rounded-lg border border-border/50 bg-card p-5">
+    <div className="rounded-xl border border-border bg-card p-5">
       <h3 className="mb-4 text-sm font-semibold text-foreground">
         Sincronizações - Últimos 7 dias
       </h3>
@@ -32,26 +32,27 @@ export function SyncChart({ data }: SyncChartProps) {
                 <stop offset="95%" stopColor="hsl(0, 84%, 60%)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(222, 47%, 15%)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 13%, 91%)" />
             <XAxis
               dataKey="date"
-              tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 11 }}
-              axisLine={{ stroke: "hsl(222, 47%, 15%)" }}
+              tick={{ fill: "hsl(220, 8%, 46%)", fontSize: 11 }}
+              axisLine={{ stroke: "hsl(220, 13%, 91%)" }}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: "hsl(215, 20%, 55%)", fontSize: 11 }}
-              axisLine={{ stroke: "hsl(222, 47%, 15%)" }}
+              tick={{ fill: "hsl(220, 8%, 46%)", fontSize: 11 }}
+              axisLine={{ stroke: "hsl(220, 13%, 91%)" }}
               tickLine={false}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(222, 47%, 10%)",
-                border: "1px solid hsl(222, 47%, 15%)",
+                backgroundColor: "hsl(0, 0%, 100%)",
+                border: "1px solid hsl(220, 13%, 91%)",
                 borderRadius: "8px",
                 fontSize: "12px",
+                boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
               }}
-              labelStyle={{ color: "hsl(210, 40%, 98%)" }}
+              labelStyle={{ color: "hsl(220, 14%, 10%)" }}
             />
             <Area
               type="monotone"

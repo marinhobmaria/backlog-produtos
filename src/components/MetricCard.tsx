@@ -24,10 +24,10 @@ export function MetricCard({
   className,
 }: MetricCardProps) {
   const variantStyles = {
-    default: "border-border/50",
-    success: "border-success/30 bg-success/5",
-    warning: "border-warning/30 bg-warning/5",
-    error: "border-destructive/30 bg-destructive/5",
+    default: "border-border",
+    success: "border-success/20",
+    warning: "border-warning/20",
+    error: "border-destructive/20",
   };
 
   const iconVariantStyles = {
@@ -40,7 +40,7 @@ export function MetricCard({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-card p-5 transition-all hover:shadow-md animate-fade-in",
+        "rounded-xl border bg-card p-5 transition-all hover:shadow-sm",
         variantStyles[variant],
         className
       )}

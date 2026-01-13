@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Header } from "@/components/Header";
 import { MetricCard } from "@/components/MetricCard";
 import { SyncChart } from "@/components/SyncChart";
@@ -26,10 +27,13 @@ const Index = () => {
     handleRetry,
   } = useSyncData();
 
+  // Enable light mode by default
+  useEffect(() => {
+    document.documentElement.classList.add("light");
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
-      {/* Subtle gradient glow at top */}
-      <div className="fixed inset-x-0 top-0 h-[500px] bg-[radial-gradient(ellipse_at_top,_hsl(173_80%_40%_/_0.08)_0%,_transparent_50%)] pointer-events-none" />
 
       <Header
         connectionStatus={connectionStatus}
