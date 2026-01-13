@@ -11,7 +11,7 @@ interface HeaderProps {
 
 export function Header({ connectionStatus, config, onConfigSave }: HeaderProps) {
   return (
-    <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
@@ -31,7 +31,7 @@ export function Header({ connectionStatus, config, onConfigSave }: HeaderProps) 
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="hidden md:flex items-center gap-4 rounded-lg border border-border/50 bg-card/50 px-4 py-2">
+          <div className="hidden md:flex items-center gap-4 rounded-lg border border-border bg-secondary/50 px-4 py-2">
             <StatusIndicator
               connected={connectionStatus.clickup.connected}
               label="ClickUp"
