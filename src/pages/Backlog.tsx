@@ -8,7 +8,7 @@ import { StatusChart } from "@/components/backlog/StatusChart";
 import { AgingChart } from "@/components/backlog/AgingChart";
 import { TimelineChart } from "@/components/backlog/TimelineChart";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, LayoutDashboard, ClipboardList } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, ClipboardList, RefreshCw, Loader2 } from "lucide-react";
 
 export default function Backlog() {
   const {
@@ -39,6 +39,9 @@ export default function Backlog() {
     loadSavedFilter,
     deleteSavedFilter,
     exportToXLS,
+    isLoading,
+    error,
+    refetch,
   } = useBacklogData();
 
   useEffect(() => {
@@ -62,12 +65,28 @@ export default function Backlog() {
               <h1 className="text-lg font-bold">Backlog Operacional</h1>
             </div>
           </div>
-          <Link to="/dashboard-executivo">
-            <Button variant="outline" size="sm" className="h-8">
-              <LayoutDashboard className="h-4 w-4 mr-1.5" />
-              Visão Executiva
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8" 
+              onClick={refetch}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              <span className="ml-1.5 hidden sm:inline">Atualizar</span>
             </Button>
-          </Link>
+            <Link to="/dashboard-executivo">
+              <Button variant="outline" size="sm" className="h-8">
+                <LayoutDashboard className="h-4 w-4 mr-1.5" />
+                Visão Executiva
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
