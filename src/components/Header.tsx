@@ -1,7 +1,9 @@
+import { Link } from "react-router-dom";
 import { StatusIndicator } from "./StatusIndicator";
 import { ConfigPanel } from "./ConfigPanel";
 import { ConnectionStatus, Config } from "@/types";
-import { ArrowRightLeft, Zap } from "lucide-react";
+import { ArrowRightLeft, ClipboardList, LayoutDashboard } from "lucide-react";
+import { Button } from "./ui/button";
 
 interface HeaderProps {
   connectionStatus: ConnectionStatus;
@@ -20,13 +22,29 @@ export function Header({ connectionStatus, config, onConfigSave }: HeaderProps) 
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-gradient">Sync</span>
+                <span className="text-primary">Sync</span>
                 <span className="text-foreground">Hub</span>
               </h1>
               <p className="text-[10px] text-muted-foreground -mt-0.5">
                 GLPI ↔ ClickUp Integration
               </p>
             </div>
+          </div>
+          
+          {/* Navigation */}
+          <div className="hidden md:flex items-center gap-1 ml-4">
+            <Link to="/backlog">
+              <Button variant="ghost" size="sm" className="h-8">
+                <ClipboardList className="h-4 w-4 mr-1.5" />
+                Backlog
+              </Button>
+            </Link>
+            <Link to="/dashboard-executivo">
+              <Button variant="ghost" size="sm" className="h-8">
+                <LayoutDashboard className="h-4 w-4 mr-1.5" />
+                Executivo
+              </Button>
+            </Link>
           </div>
         </div>
 
