@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useBacklogData } from "@/hooks/useBacklogData";
 import { BacklogFiltersComponent } from "@/components/backlog/BacklogFilters";
 import { BacklogTable } from "@/components/backlog/BacklogTable";
+import { OperationalAlerts } from "@/components/backlog/OperationalAlerts";
 import { StatusChart } from "@/components/backlog/StatusChart";
 import { AgingChart } from "@/components/backlog/AgingChart";
 import { TimelineChart } from "@/components/backlog/TimelineChart";
@@ -16,17 +17,28 @@ export default function Backlog() {
     statusCounts,
     agingBuckets,
     dailyOpenings,
+    alerts,
     filterOptions,
     currentPage,
     totalPages,
+    pageSize,
     sortColumn,
     sortDirection,
     handleSort,
     setCurrentPage,
+    setPageSize,
     filters,
     updateFilter,
     resetFilters,
     filterByStatus,
+    toggleAlertsOnly,
+    hasActiveFilters,
+    activeFilterCount,
+    savedFilters,
+    saveCurrentFilter,
+    loadSavedFilter,
+    deleteSavedFilter,
+    exportToXLS,
   } = useBacklogData();
 
   useEffect(() => {
@@ -59,21 +71,27 @@ export default function Backlog() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
+      <main className="container mx-auto px-4 py-6 space-y-4">
         {/* Filters */}
         <BacklogFiltersComponent
           filters={filters}
           updateFilter={updateFilter}
           resetFilters={resetFilters}
           filterOptions={filterOptions}
+          hasActiveFilters={hasActiveFilters}
+          activeFilterCount={activeFilterCount}
+          savedFilters={savedFilters}
+          saveCurrentFilter={saveCurrentFilter}
+          loadSavedFilter={loadSavedFilter}
+          deleteSavedFilter={deleteSavedFilter}
         />
 
-        {/* Charts Row */}
-        <div className="grid gap-4 md:grid-cols-3">
-          <StatusChart data={statusCounts} onStatusClick={filterByStatus} />
-          <AgingChart data={agingBuckets} />
-          <TimelineChart data={dailyOpenings} />
-        </div>
+        {/* Operational Alerts */}
+        <OperationalAlerts
+          alerts={alerts}
+          alertsOnly={filters.alertsOnly}
+          onToggleAlertsOnly={toggleAlertsOnly}
+        />
 
         {/* Table */}
         <BacklogTable
@@ -81,11 +99,21 @@ export default function Backlog() {
           totalTasks={totalTasks}
           currentPage={currentPage}
           totalPages={totalPages}
+          pageSize={pageSize}
           sortColumn={sortColumn}
           sortDirection={sortDirection}
           onSort={handleSort}
           onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          onExport={exportToXLS}
         />
+
+        {/* Charts Row - Dashboards after table */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <StatusChart data={statusCounts} onStatusClick={filterByStatus} />
+          <AgingChart data={agingBuckets} />
+          <TimelineChart data={dailyOpenings} />
+        </div>
       </main>
 
       {/* Footer */}

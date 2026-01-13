@@ -1,22 +1,27 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import {
   BacklogTask,
   BacklogFilters,
   BacklogMetrics,
+  BacklogAlerts,
   AgingBucket,
+  SavedFilter,
   TaskStatus,
   TaskPriority,
   TaskType,
+  TaskTag,
 } from "@/types";
-import { subDays, differenceInDays, format, startOfWeek, addDays } from "date-fns";
+import { subDays, differenceInDays, format, addDays } from "date-fns";
 
 // Mock data generator
 const generateMockTasks = (): BacklogTask[] => {
   const statuses: TaskStatus[] = ["open", "in_progress", "pending", "resolved", "closed"];
   const priorities: TaskPriority[] = ["urgent", "high", "normal", "low"];
   const types: TaskType[] = ["incident", "request", "problem", "change"];
-  const assignees = ["João Silva", "Maria Santos", "Pedro Lima", "Ana Costa", "Carlos Oliveira"];
+  const assignees = ["João Silva", "Maria Santos", "Pedro Lima", "Ana Costa", "Carlos Oliveira", "Sem responsável"];
   const squads = ["Infraestrutura", "Desenvolvimento", "Suporte N2", "Segurança", "DevOps"];
+  const clients = ["Empresa ABC", "Corporação XYZ", "Indústria 123", "Serviços Beta", "Tech Alpha"];
+  const sectors = ["TI", "RH", "Financeiro", "Comercial", "Operações"];
   const titles = [
     "Erro ao acessar sistema ERP",
     "Lentidão no servidor de produção",
@@ -28,27 +33,53 @@ const generateMockTasks = (): BacklogTask[] => {
     "Incidente de segurança",
     "Manutenção preventiva",
     "Upgrade de licença",
+    "Configuração de firewall",
+    "Migração de dados",
+    "Instalação de software",
+    "Reset de senha urgente",
+    "Análise de performance",
   ];
 
   const tasks: BacklogTask[] = [];
   const now = new Date();
 
-  for (let i = 1; i <= 150; i++) {
+  for (let i = 1; i <= 200; i++) {
     const openedAt = subDays(now, Math.floor(Math.random() * 60));
     const lastUpdatedAt = subDays(now, Math.floor(Math.random() * 30));
     const daysSinceLastAction = differenceInDays(now, lastUpdatedAt);
+    const assignee = assignees[Math.floor(Math.random() * assignees.length)];
+    const priority = priorities[Math.floor(Math.random() * priorities.length)];
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+
+    // Generate SLA deadline (some tasks breach SLA)
+    const slaDeadline = addDays(openedAt, priority === "urgent" ? 1 : priority === "high" ? 3 : 7);
+    const isSlaBreach = now > slaDeadline && status !== "closed" && status !== "resolved";
+
+    // Generate tags based on conditions
+    const tags: TaskTag[] = [];
+    if (daysSinceLastAction > 7) tags.push("stale");
+    if (isSlaBreach) tags.push("sla_breached");
+    if (assignee === "Sem responsável") tags.push("no_owner");
+    if (priority === "urgent" || (daysSinceLastAction > 15 && status === "open")) tags.push("critical");
+    if (daysSinceLastAction > 3 && daysSinceLastAction <= 7) tags.push("attention");
+    if (Math.random() > 0.85) tags.push("dependency");
 
     tasks.push({
       id: `GLPI-${String(i).padStart(5, "0")}`,
       title: titles[Math.floor(Math.random() * titles.length)],
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      priority: priorities[Math.floor(Math.random() * priorities.length)],
+      status,
+      priority,
       type: types[Math.floor(Math.random() * types.length)],
-      assignee: assignees[Math.floor(Math.random() * assignees.length)],
+      assignee,
       squad: squads[Math.floor(Math.random() * squads.length)],
+      client: clients[Math.floor(Math.random() * clients.length)],
+      sector: sectors[Math.floor(Math.random() * sectors.length)],
+      tags,
       openedAt,
       lastUpdatedAt,
       daysSinceLastAction,
+      slaDeadline,
+      isSlaBreach,
     });
   }
 
@@ -63,16 +94,34 @@ const initialFilters: BacklogFilters = {
   squad: [],
   priority: [],
   type: [],
+  client: [],
+  sector: [],
+  tags: [],
   search: "",
+  alertsOnly: false,
 };
+
+const SAVED_FILTERS_KEY = "backlog_saved_filters";
 
 export function useBacklogData() {
   const [allTasks] = useState<BacklogTask[]>(generateMockTasks);
   const [filters, setFilters] = useState<BacklogFilters>(initialFilters);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(15);
   const [sortColumn, setSortColumn] = useState<keyof BacklogTask>("openedAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [secondarySortColumn, setSecondarySortColumn] = useState<keyof BacklogTask | null>(null);
+  const [secondarySortDirection, setSecondarySortDirection] = useState<"asc" | "desc">("desc");
+
+  // Load saved filters from localStorage
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>(() => {
+    try {
+      const stored = localStorage.getItem(SAVED_FILTERS_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -96,12 +145,29 @@ export function useBacklogData() {
       // Type filter
       if (filters.type.length > 0 && !filters.type.includes(task.type)) return false;
 
+      // Client filter
+      if (filters.client.length > 0 && !filters.client.includes(task.client)) return false;
+
+      // Sector filter
+      if (filters.sector.length > 0 && !filters.sector.includes(task.sector)) return false;
+
+      // Tags filter
+      if (filters.tags.length > 0 && !filters.tags.some((tag) => task.tags.includes(tag))) return false;
+
+      // Alerts only filter
+      if (filters.alertsOnly) {
+        const hasAlert = task.daysSinceLastAction > 7 || task.isSlaBreach || task.assignee === "Sem responsável";
+        if (!hasAlert) return false;
+      }
+
       // Search filter
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
         return (
           task.id.toLowerCase().includes(searchLower) ||
-          task.title.toLowerCase().includes(searchLower)
+          task.title.toLowerCase().includes(searchLower) ||
+          task.client.toLowerCase().includes(searchLower) ||
+          task.assignee.toLowerCase().includes(searchLower)
         );
       }
 
@@ -109,31 +175,37 @@ export function useBacklogData() {
     });
   }, [allTasks, filters]);
 
-  // Sort tasks
+  // Sort tasks with primary and secondary sort
   const sortedTasks = useMemo(() => {
     return [...filteredTasks].sort((a, b) => {
-      const aVal = a[sortColumn];
-      const bVal = b[sortColumn];
+      const compareValues = (aVal: unknown, bVal: unknown, direction: "asc" | "desc") => {
+        if (aVal instanceof Date && bVal instanceof Date) {
+          return direction === "asc"
+            ? aVal.getTime() - bVal.getTime()
+            : bVal.getTime() - aVal.getTime();
+        }
 
-      if (aVal instanceof Date && bVal instanceof Date) {
-        return sortDirection === "asc"
-          ? aVal.getTime() - bVal.getTime()
-          : bVal.getTime() - aVal.getTime();
-      }
+        if (typeof aVal === "string" && typeof bVal === "string") {
+          return direction === "asc"
+            ? aVal.localeCompare(bVal)
+            : bVal.localeCompare(aVal);
+        }
 
-      if (typeof aVal === "string" && typeof bVal === "string") {
-        return sortDirection === "asc"
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
-      }
+        if (typeof aVal === "number" && typeof bVal === "number") {
+          return direction === "asc" ? aVal - bVal : bVal - aVal;
+        }
 
-      if (typeof aVal === "number" && typeof bVal === "number") {
-        return sortDirection === "asc" ? aVal - bVal : bVal - aVal;
-      }
+        return 0;
+      };
 
-      return 0;
+      // Primary sort
+      const primaryResult = compareValues(a[sortColumn], b[sortColumn], sortDirection);
+      if (primaryResult !== 0 || !secondarySortColumn) return primaryResult;
+
+      // Secondary sort
+      return compareValues(a[secondarySortColumn], b[secondarySortColumn], secondarySortDirection);
     });
-  }, [filteredTasks, sortColumn, sortDirection]);
+  }, [filteredTasks, sortColumn, sortDirection, secondarySortColumn, secondarySortDirection]);
 
   // Paginated tasks
   const paginatedTasks = useMemo(() => {
@@ -163,13 +235,14 @@ export function useBacklogData() {
   // Aging buckets
   const agingBuckets: AgingBucket[] = useMemo(() => {
     const buckets = [
-      { label: "0-2 dias", min: 0, max: 2, count: 0, isCritical: false },
-      { label: "3-7 dias", min: 3, max: 7, count: 0, isCritical: false },
+      { label: "0-3 dias", min: 0, max: 3, count: 0, isCritical: false },
+      { label: "4-7 dias", min: 4, max: 7, count: 0, isCritical: false },
       { label: "8-15 dias", min: 8, max: 15, count: 0, isCritical: true },
       { label: ">15 dias", min: 16, max: Infinity, count: 0, isCritical: true },
     ];
 
     filteredTasks.forEach((task) => {
+      if (task.status === "closed" || task.status === "resolved") return;
       const days = task.daysSinceLastAction;
       for (const bucket of buckets) {
         if (days >= bucket.min && days <= bucket.max) {
@@ -197,6 +270,18 @@ export function useBacklogData() {
     }
 
     return last30Days;
+  }, [filteredTasks]);
+
+  // Alerts calculation
+  const alerts: BacklogAlerts = useMemo(() => {
+    const openTasks = filteredTasks.filter((t) => t.status !== "closed" && t.status !== "resolved");
+
+    return {
+      staleCount: openTasks.filter((t) => t.daysSinceLastAction > 7).length,
+      slaBreachedCount: openTasks.filter((t) => t.isSlaBreach).length,
+      noOwnerCount: openTasks.filter((t) => t.assignee === "Sem responsável").length,
+      criticalCount: openTasks.filter((t) => t.tags.includes("critical")).length,
+    };
   }, [filteredTasks]);
 
   // Metrics for executive dashboard
@@ -234,31 +319,42 @@ export function useBacklogData() {
   // Available filter options
   const filterOptions = useMemo(() => {
     return {
-      assignees: [...new Set(allTasks.map((t) => t.assignee))],
-      squads: [...new Set(allTasks.map((t) => t.squad))],
+      assignees: [...new Set(allTasks.map((t) => t.assignee))].sort(),
+      squads: [...new Set(allTasks.map((t) => t.squad))].sort(),
+      clients: [...new Set(allTasks.map((t) => t.client))].sort(),
+      sectors: [...new Set(allTasks.map((t) => t.sector))].sort(),
     };
   }, [allTasks]);
 
-  const handleSort = (column: keyof BacklogTask) => {
-    if (sortColumn === column) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  const handleSort = useCallback((column: keyof BacklogTask, isSecondary = false) => {
+    if (isSecondary) {
+      if (secondarySortColumn === column) {
+        setSecondarySortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      } else {
+        setSecondarySortColumn(column);
+        setSecondarySortDirection("desc");
+      }
     } else {
-      setSortColumn(column);
-      setSortDirection("desc");
+      if (sortColumn === column) {
+        setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      } else {
+        setSortColumn(column);
+        setSortDirection("desc");
+      }
     }
-  };
+  }, [sortColumn, secondarySortColumn]);
 
-  const updateFilter = <K extends keyof BacklogFilters>(key: K, value: BacklogFilters[K]) => {
+  const updateFilter = useCallback(<K extends keyof BacklogFilters>(key: K, value: BacklogFilters[K]) => {
     setFilters((prev) => ({ ...prev, [key]: value }));
     setCurrentPage(1);
-  };
+  }, []);
 
-  const resetFilters = () => {
+  const resetFilters = useCallback(() => {
     setFilters(initialFilters);
     setCurrentPage(1);
-  };
+  }, []);
 
-  const filterByStatus = (status: TaskStatus) => {
+  const filterByStatus = useCallback((status: TaskStatus) => {
     setFilters((prev) => ({
       ...prev,
       status: prev.status.includes(status)
@@ -266,7 +362,155 @@ export function useBacklogData() {
         : [...prev.status, status],
     }));
     setCurrentPage(1);
-  };
+  }, []);
+
+  const filterByTag = useCallback((tag: TaskTag) => {
+    setFilters((prev) => ({
+      ...prev,
+      tags: prev.tags.includes(tag)
+        ? prev.tags.filter((t) => t !== tag)
+        : [...prev.tags, tag],
+    }));
+    setCurrentPage(1);
+  }, []);
+
+  const toggleAlertsOnly = useCallback(() => {
+    setFilters((prev) => ({
+      ...prev,
+      alertsOnly: !prev.alertsOnly,
+    }));
+    setCurrentPage(1);
+  }, []);
+
+  const saveCurrentFilter = useCallback((name: string) => {
+    const { search, alertsOnly, ...filtersToSave } = filters;
+    const newFilter: SavedFilter = {
+      id: `filter-${Date.now()}`,
+      name,
+      filters: filtersToSave,
+      createdAt: new Date(),
+    };
+    const updated = [...savedFilters, newFilter];
+    setSavedFilters(updated);
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(updated));
+  }, [filters, savedFilters]);
+
+  const loadSavedFilter = useCallback((filterId: string) => {
+    const saved = savedFilters.find((f) => f.id === filterId);
+    if (saved) {
+      setFilters({ ...saved.filters, search: filters.search, alertsOnly: false });
+      setCurrentPage(1);
+    }
+  }, [savedFilters, filters.search]);
+
+  const deleteSavedFilter = useCallback((filterId: string) => {
+    const updated = savedFilters.filter((f) => f.id !== filterId);
+    setSavedFilters(updated);
+    localStorage.setItem(SAVED_FILTERS_KEY, JSON.stringify(updated));
+  }, [savedFilters]);
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filters.search !== "" ||
+      filters.status.length > 0 ||
+      filters.priority.length > 0 ||
+      filters.type.length > 0 ||
+      filters.assignee.length > 0 ||
+      filters.squad.length > 0 ||
+      filters.client.length > 0 ||
+      filters.sector.length > 0 ||
+      filters.tags.length > 0 ||
+      filters.startDate !== null ||
+      filters.endDate !== null ||
+      filters.alertsOnly
+    );
+  }, [filters]);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (filters.status.length > 0) count++;
+    if (filters.priority.length > 0) count++;
+    if (filters.type.length > 0) count++;
+    if (filters.assignee.length > 0) count++;
+    if (filters.squad.length > 0) count++;
+    if (filters.client.length > 0) count++;
+    if (filters.sector.length > 0) count++;
+    if (filters.tags.length > 0) count++;
+    if (filters.startDate || filters.endDate) count++;
+    if (filters.alertsOnly) count++;
+    return count;
+  }, [filters]);
+
+  // Export function
+  const exportToXLS = useCallback(() => {
+    const headers = [
+      "ID",
+      "Descrição",
+      "Status",
+      "Prioridade",
+      "Cliente",
+      "Responsável",
+      "Setor",
+      "Data Abertura",
+      "Última Atualização",
+      "Dias sem Ação",
+      "Tags",
+    ];
+
+    const statusLabels: Record<TaskStatus, string> = {
+      open: "Aberto",
+      in_progress: "Em Andamento",
+      pending: "Pendente",
+      resolved: "Resolvido",
+      closed: "Fechado",
+    };
+
+    const priorityLabels: Record<TaskPriority, string> = {
+      urgent: "Urgente",
+      high: "Alta",
+      normal: "Normal",
+      low: "Baixa",
+    };
+
+    const tagLabels: Record<TaskTag, string> = {
+      critical: "Crítico",
+      attention: "Atenção",
+      sla_breached: "SLA Estourado",
+      dependency: "Dependência",
+      no_owner: "Sem Responsável",
+      stale: "Parado",
+    };
+
+    const rows = sortedTasks.map((task) => [
+      task.id,
+      task.title,
+      statusLabels[task.status],
+      priorityLabels[task.priority],
+      task.client,
+      task.assignee,
+      task.sector,
+      format(task.openedAt, "dd/MM/yyyy"),
+      format(task.lastUpdatedAt, "dd/MM/yyyy"),
+      task.daysSinceLastAction,
+      task.tags.map((t) => tagLabels[t]).join(", "),
+    ]);
+
+    // Create CSV content (Excel compatible)
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(";")),
+    ].join("\n");
+
+    // Add BOM for UTF-8
+    const bom = "\uFEFF";
+    const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `backlog_${format(new Date(), "yyyy-MM-dd_HH-mm")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [sortedTasks]);
 
   return {
     // Data
@@ -274,6 +518,7 @@ export function useBacklogData() {
     allFilteredTasks: filteredTasks,
     totalTasks: sortedTasks.length,
     metrics,
+    alerts,
     statusCounts,
     agingBuckets,
     dailyOpenings,
@@ -284,10 +529,13 @@ export function useBacklogData() {
     totalPages,
     pageSize,
     setCurrentPage,
+    setPageSize,
 
     // Sorting
     sortColumn,
     sortDirection,
+    secondarySortColumn,
+    secondarySortDirection,
     handleSort,
 
     // Filters
@@ -295,5 +543,18 @@ export function useBacklogData() {
     updateFilter,
     resetFilters,
     filterByStatus,
+    filterByTag,
+    toggleAlertsOnly,
+    hasActiveFilters,
+    activeFilterCount,
+
+    // Saved filters
+    savedFilters,
+    saveCurrentFilter,
+    loadSavedFilter,
+    deleteSavedFilter,
+
+    // Export
+    exportToXLS,
   };
 }
