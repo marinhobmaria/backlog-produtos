@@ -1,1 +1,4 @@
 project_id = "ixkuyhzaexiwntgqtdad"
+
+[functions.glpi-tickets]
+verify_jwt = false

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   BacklogTask,
   BacklogFilters,
@@ -11,80 +11,28 @@ import {
   TaskType,
   TaskTag,
 } from "@/types";
-import { subDays, differenceInDays, format, addDays } from "date-fns";
+import { subDays, differenceInDays, format } from "date-fns";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
-// Mock data generator
-const generateMockTasks = (): BacklogTask[] => {
-  const statuses: TaskStatus[] = ["open", "in_progress", "pending", "resolved", "closed"];
-  const priorities: TaskPriority[] = ["urgent", "high", "normal", "low"];
-  const types: TaskType[] = ["incident", "request", "problem", "change"];
-  const assignees = ["João Silva", "Maria Santos", "Pedro Lima", "Ana Costa", "Carlos Oliveira", "Sem responsável"];
-  const squads = ["Infraestrutura", "Desenvolvimento", "Suporte N2", "Segurança", "DevOps"];
-  const clients = ["Empresa ABC", "Corporação XYZ", "Indústria 123", "Serviços Beta", "Tech Alpha"];
-  const sectors = ["TI", "RH", "Financeiro", "Comercial", "Operações"];
-  const titles = [
-    "Erro ao acessar sistema ERP",
-    "Lentidão no servidor de produção",
-    "Solicitação de novo usuário",
-    "Atualização de permissões",
-    "Falha no backup automático",
-    "Problema de conectividade VPN",
-    "Requisição de equipamento",
-    "Incidente de segurança",
-    "Manutenção preventiva",
-    "Upgrade de licença",
-    "Configuração de firewall",
-    "Migração de dados",
-    "Instalação de software",
-    "Reset de senha urgente",
-    "Análise de performance",
-  ];
-
-  const tasks: BacklogTask[] = [];
-  const now = new Date();
-
-  for (let i = 1; i <= 200; i++) {
-    const openedAt = subDays(now, Math.floor(Math.random() * 60));
-    const lastUpdatedAt = subDays(now, Math.floor(Math.random() * 30));
-    const daysSinceLastAction = differenceInDays(now, lastUpdatedAt);
-    const assignee = assignees[Math.floor(Math.random() * assignees.length)];
-    const priority = priorities[Math.floor(Math.random() * priorities.length)];
-    const status = statuses[Math.floor(Math.random() * statuses.length)];
-
-    // Generate SLA deadline (some tasks breach SLA)
-    const slaDeadline = addDays(openedAt, priority === "urgent" ? 1 : priority === "high" ? 3 : 7);
-    const isSlaBreach = now > slaDeadline && status !== "closed" && status !== "resolved";
-
-    // Generate tags based on conditions
-    const tags: TaskTag[] = [];
-    if (daysSinceLastAction > 7) tags.push("stale");
-    if (isSlaBreach) tags.push("sla_breached");
-    if (assignee === "Sem responsável") tags.push("no_owner");
-    if (priority === "urgent" || (daysSinceLastAction > 15 && status === "open")) tags.push("critical");
-    if (daysSinceLastAction > 3 && daysSinceLastAction <= 7) tags.push("attention");
-    if (Math.random() > 0.85) tags.push("dependency");
-
-    tasks.push({
-      id: `GLPI-${String(i).padStart(5, "0")}`,
-      title: titles[Math.floor(Math.random() * titles.length)],
-      status,
-      priority,
-      type: types[Math.floor(Math.random() * types.length)],
-      assignee,
-      squad: squads[Math.floor(Math.random() * squads.length)],
-      client: clients[Math.floor(Math.random() * clients.length)],
-      sector: sectors[Math.floor(Math.random() * sectors.length)],
-      tags,
-      openedAt,
-      lastUpdatedAt,
-      daysSinceLastAction,
-      slaDeadline,
-      isSlaBreach,
-    });
-  }
-
-  return tasks;
-};
+interface GLPITask {
+  id: string;
+  title: string;
+  status: string;
+  priority: string;
+  type: string;
+  assignee: string;
+  squad: string;
+  client: string;
+  sector: string;
+  tags: string[];
+  openedAt: string;
+  lastUpdatedAt: string;
+  daysSinceLastAction: number;
+  slaDeadline: string | null;
+  isSlaBreach: boolean;
+  content?: string;
+}
 
 const initialFilters: BacklogFilters = {
   startDate: null,
@@ -104,7 +52,9 @@ const initialFilters: BacklogFilters = {
 const SAVED_FILTERS_KEY = "backlog_saved_filters";
 
 export function useBacklogData() {
-  const [allTasks] = useState<BacklogTask[]>(generateMockTasks);
+  const [allTasks, setAllTasks] = useState<BacklogTask[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<BacklogFilters>(initialFilters);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
@@ -122,6 +72,58 @@ export function useBacklogData() {
       return [];
     }
   });
+
+  // Fetch tasks from GLPI
+  const fetchGLPITasks = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      console.log("Buscando tickets do GLPI...");
+      const { data, error: invokeError } = await supabase.functions.invoke("glpi-tickets");
+      
+      if (invokeError) {
+        throw new Error(invokeError.message);
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || "Erro ao buscar tickets");
+      }
+
+      const tasks: BacklogTask[] = data.tickets.map((ticket: GLPITask) => ({
+        id: ticket.id,
+        title: ticket.title,
+        status: ticket.status as TaskStatus,
+        priority: ticket.priority as TaskPriority,
+        type: ticket.type as TaskType,
+        assignee: ticket.assignee,
+        squad: ticket.squad,
+        client: ticket.client,
+        sector: ticket.sector,
+        tags: ticket.tags as TaskTag[],
+        openedAt: new Date(ticket.openedAt),
+        lastUpdatedAt: new Date(ticket.lastUpdatedAt),
+        daysSinceLastAction: ticket.daysSinceLastAction,
+        slaDeadline: ticket.slaDeadline ? new Date(ticket.slaDeadline) : undefined,
+        isSlaBreach: ticket.isSlaBreach,
+      }));
+
+      setAllTasks(tasks);
+      toast.success(`${tasks.length} tickets carregados do GLPI`);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+      setError(errorMessage);
+      toast.error(`Erro ao carregar tickets: ${errorMessage}`);
+      console.error("Erro ao buscar tickets:", err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Fetch on mount
+  useEffect(() => {
+    fetchGLPITasks();
+  }, [fetchGLPITasks]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -156,7 +158,7 @@ export function useBacklogData() {
 
       // Alerts only filter
       if (filters.alertsOnly) {
-        const hasAlert = task.daysSinceLastAction > 7 || task.isSlaBreach || task.assignee === "Sem responsável";
+        const hasAlert = task.daysSinceLastAction > 7 || task.isSlaBreach || task.assignee === "Sem responsável" || task.assignee === "Não atribuído";
         if (!hasAlert) return false;
       }
 
@@ -279,7 +281,7 @@ export function useBacklogData() {
     return {
       staleCount: openTasks.filter((t) => t.daysSinceLastAction > 7).length,
       slaBreachedCount: openTasks.filter((t) => t.isSlaBreach).length,
-      noOwnerCount: openTasks.filter((t) => t.assignee === "Sem responsável").length,
+      noOwnerCount: openTasks.filter((t) => t.assignee === "Sem responsável" || t.assignee === "Não atribuído").length,
       criticalCount: openTasks.filter((t) => t.tags.includes("critical")).length,
     };
   }, [filteredTasks]);
@@ -523,6 +525,9 @@ export function useBacklogData() {
     agingBuckets,
     dailyOpenings,
     filterOptions,
+    isLoading,
+    error,
+    refetch: fetchGLPITasks,
 
     // Pagination
     currentPage,
