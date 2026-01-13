@@ -99,6 +99,7 @@ export interface DailySync {
 export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
 export type TaskStatus = 'open' | 'in_progress' | 'pending' | 'resolved' | 'closed';
 export type TaskType = 'incident' | 'request' | 'problem' | 'change';
+export type TaskTag = 'critical' | 'attention' | 'sla_breached' | 'dependency' | 'no_owner' | 'stale';
 
 export interface BacklogTask {
   id: string;
@@ -108,9 +109,14 @@ export interface BacklogTask {
   type: TaskType;
   assignee: string;
   squad: string;
+  client: string;
+  sector: string;
+  tags: TaskTag[];
   openedAt: Date;
   lastUpdatedAt: Date;
   daysSinceLastAction: number;
+  slaDeadline?: Date;
+  isSlaBreach: boolean;
 }
 
 export interface BacklogFilters {
@@ -121,7 +127,18 @@ export interface BacklogFilters {
   squad: string[];
   priority: TaskPriority[];
   type: TaskType[];
+  client: string[];
+  sector: string[];
+  tags: TaskTag[];
   search: string;
+  alertsOnly: boolean;
+}
+
+export interface SavedFilter {
+  id: string;
+  name: string;
+  filters: Omit<BacklogFilters, 'search' | 'alertsOnly'>;
+  createdAt: Date;
 }
 
 export interface AgingBucket {
@@ -139,4 +156,11 @@ export interface BacklogMetrics {
   newestTask: BacklogTask | null;
   tasksWithoutAction: number;
   criticalAgingCount: number;
+}
+
+export interface BacklogAlerts {
+  staleCount: number;
+  slaBreachedCount: number;
+  noOwnerCount: number;
+  criticalCount: number;
 }
