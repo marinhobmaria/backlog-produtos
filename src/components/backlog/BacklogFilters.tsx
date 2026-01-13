@@ -190,7 +190,7 @@ export function BacklogFiltersComponent({
   loadSavedFilter,
   deleteSavedFilter,
 }: BacklogFiltersProps) {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [filterName, setFilterName] = useState("");
 

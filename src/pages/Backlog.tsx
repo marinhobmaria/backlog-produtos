@@ -86,13 +86,6 @@ export default function Backlog() {
           deleteSavedFilter={deleteSavedFilter}
         />
 
-        {/* Operational Alerts */}
-        <OperationalAlerts
-          alerts={alerts}
-          alertsOnly={filters.alertsOnly}
-          onToggleAlertsOnly={toggleAlertsOnly}
-        />
-
         {/* Table */}
         <BacklogTable
           tasks={tasks}
@@ -108,7 +101,14 @@ export default function Backlog() {
           onExport={exportToXLS}
         />
 
-        {/* Charts Row - Dashboards after table */}
+        {/* Indicadores - abaixo da tabela */}
+        <OperationalAlerts
+          alerts={alerts}
+          alertsOnly={filters.alertsOnly}
+          onToggleAlertsOnly={toggleAlertsOnly}
+        />
+
+        {/* Charts Row - Dashboards after indicadores */}
         <div className="grid gap-4 md:grid-cols-3">
           <StatusChart data={statusCounts} onStatusClick={filterByStatus} />
           <AgingChart data={agingBuckets} />
