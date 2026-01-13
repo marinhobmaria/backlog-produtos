@@ -94,3 +94,49 @@ export interface DailySync {
   success: number;
   error: number;
 }
+
+// Backlog types
+export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
+export type TaskStatus = 'open' | 'in_progress' | 'pending' | 'resolved' | 'closed';
+export type TaskType = 'incident' | 'request' | 'problem' | 'change';
+
+export interface BacklogTask {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  type: TaskType;
+  assignee: string;
+  squad: string;
+  openedAt: Date;
+  lastUpdatedAt: Date;
+  daysSinceLastAction: number;
+}
+
+export interface BacklogFilters {
+  startDate: Date | null;
+  endDate: Date | null;
+  status: TaskStatus[];
+  assignee: string[];
+  squad: string[];
+  priority: TaskPriority[];
+  type: TaskType[];
+  search: string;
+}
+
+export interface AgingBucket {
+  label: string;
+  min: number;
+  max: number;
+  count: number;
+  isCritical: boolean;
+}
+
+export interface BacklogMetrics {
+  total: number;
+  byStatus: Record<TaskStatus, number>;
+  oldestTask: BacklogTask | null;
+  newestTask: BacklogTask | null;
+  tasksWithoutAction: number;
+  criticalAgingCount: number;
+}
