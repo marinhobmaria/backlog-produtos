@@ -60,7 +60,7 @@ export function OperationalAlerts({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <span className="font-medium text-sm">Alertas Operacionais</span>
+            <span className="font-medium text-sm">Backlog</span>
             <span className="text-xs text-muted-foreground">
               ({totalAlerts} tarefa{totalAlerts !== 1 ? "s" : ""} requerem atenção)
             </span>
