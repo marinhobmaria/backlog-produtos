@@ -50,6 +50,14 @@ const initialFilters: BacklogFilters = {
 };
 
 const SAVED_FILTERS_KEY = "backlog_saved_filters";
+const CACHE_KEY = "backlog_tasks_cache";
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+
+interface CachedData {
+  tasks: BacklogTask[];
+  taskContents: Record<string, TaskContent>;
+  timestamp: number;
+}
 
 interface TaskContent {
   id: string;
@@ -86,8 +94,63 @@ export function useBacklogData() {
     }
   });
 
+  // Try to load from cache
+  const loadFromCache = useCallback((): CachedData | null => {
+    try {
+      const cached = sessionStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+      
+      const data: CachedData = JSON.parse(cached);
+      const now = Date.now();
+      
+      // Check if cache is still valid
+      if (now - data.timestamp > CACHE_DURATION) {
+        sessionStorage.removeItem(CACHE_KEY);
+        return null;
+      }
+      
+      // Reconstruct Date objects
+      data.tasks = data.tasks.map(task => ({
+        ...task,
+        openedAt: new Date(task.openedAt),
+        lastUpdatedAt: new Date(task.lastUpdatedAt),
+        slaDeadline: task.slaDeadline ? new Date(task.slaDeadline) : undefined,
+      }));
+      
+      return data;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Save to cache
+  const saveToCache = useCallback((tasks: BacklogTask[], contents: Record<string, TaskContent>) => {
+    try {
+      const cacheData: CachedData = {
+        tasks,
+        taskContents: contents,
+        timestamp: Date.now(),
+      };
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+    } catch (err) {
+      console.warn("Failed to cache data:", err);
+    }
+  }, []);
+
   // Fetch tasks from GLPI
-  const fetchGLPITasks = useCallback(async () => {
+  const fetchGLPITasks = useCallback(async (forceRefresh = false) => {
+    // Check cache first (unless forcing refresh)
+    if (!forceRefresh) {
+      const cached = loadFromCache();
+      if (cached) {
+        console.log("Usando dados do cache");
+        setAllTasks(cached.tasks);
+        setTaskContents(cached.taskContents);
+        setIsLoading(false);
+        return;
+      }
+    }
+
     setIsLoading(true);
     setError(null);
     
@@ -133,6 +196,7 @@ export function useBacklogData() {
 
       setAllTasks(tasks);
       setTaskContents(contents);
+      saveToCache(tasks, contents);
       toast.success(`${tasks.length} tickets carregados do GLPI`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
@@ -142,11 +206,14 @@ export function useBacklogData() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadFromCache, saveToCache]);
 
-  // Fetch on mount
+  // Refetch with force refresh
+  const refetch = useCallback(() => fetchGLPITasks(true), [fetchGLPITasks]);
+
+  // Fetch on mount (from cache if available)
   useEffect(() => {
-    fetchGLPITasks();
+    fetchGLPITasks(false);
   }, [fetchGLPITasks]);
 
   // Filter tasks
@@ -551,7 +618,7 @@ export function useBacklogData() {
     filterOptions,
     isLoading,
     error,
-    refetch: fetchGLPITasks,
+    refetch,
 
     // Pagination
     currentPage,
