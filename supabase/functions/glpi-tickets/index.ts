@@ -165,21 +165,57 @@ serve(async (req) => {
 
     // Função para extrair setor e produto do nome/conteúdo do ticket
     const extractSectorAndProduct = (name: string, content: string, category: string | number) => {
+      let sector = 'TI';
+      let product = '';
+      
+      // PRIORIDADE 1: Categoria do GLPI no formato "Setor | Produto"
+      if (typeof category === 'string' && category.includes('|')) {
+        const parts = category.split('|').map(p => p.trim());
+        if (parts.length >= 2) {
+          sector = parts[0] || sector;
+          product = parts[1] || product;
+          console.log(`Extraído da categoria: Setor="${sector}", Produto="${product}"`);
+          return { sector, product };
+        }
+      }
+      
+      // PRIORIDADE 2: Outros separadores comuns (>, /, -)
+      if (typeof category === 'string') {
+        const separators = ['>', '/', ' - '];
+        for (const sep of separators) {
+          if (category.includes(sep)) {
+            const parts = category.split(sep).map(p => p.trim());
+            if (parts.length >= 2) {
+              sector = parts[0] || sector;
+              product = parts[1] || product;
+              console.log(`Extraído da categoria (${sep}): Setor="${sector}", Produto="${product}"`);
+              return { sector, product };
+            }
+          }
+        }
+        
+        // Se categoria é só uma string simples, usar como setor
+        if (category.trim()) {
+          sector = category.trim();
+        }
+      }
+      
+      // PRIORIDADE 3: Fallback - tentar extrair do texto do ticket
       const text = `${name} ${content}`.toLowerCase();
       
-      // Padrões conhecidos para extração
       const sectorPatterns: Record<string, string[]> = {
         'Produtos': ['produtos', 'produto', 'desenvolvimento', 'dev'],
         'Suporte': ['suporte', 'atendimento', 'helpdesk'],
         'Infraestrutura': ['infra', 'infraestrutura', 'servidores', 'rede'],
         'Comercial': ['comercial', 'vendas', 'contrato'],
         'Financeiro': ['financeiro', 'cobrança', 'pagamento'],
+        'Implantação': ['implantação', 'implantacao', 'deploy'],
       };
       
       const productPatterns: Record<string, string[]> = {
-        'Saúde Simples': ['saúde simples', 'saude simples', 'saudesimples'],
+        'Saúde Simples': ['saúde simples', 'saude simples', 'saudesimples', 'ss'],
         'OM30': ['om30', 'om 30'],
-        'e-SUS': ['e-sus', 'esus', 'e sus'],
+        'e-SUS': ['e-sus', 'esus', 'e sus', 'esus ab'],
         'Gestão': ['gestão', 'gestao'],
         'Prontuário': ['prontuário', 'prontuario', 'pep'],
         'Faturamento': ['faturamento', 'fat'],
@@ -187,10 +223,10 @@ serve(async (req) => {
         'Farmácia': ['farmácia', 'farmacia'],
         'Laboratório': ['laboratório', 'laboratorio', 'lab'],
         'Agendamento': ['agendamento', 'agenda'],
+        'Regulação': ['regulação', 'regulacao'],
+        'AIH': ['aih', 'internação', 'internacao'],
+        'Vacina': ['vacina', 'imunização', 'imunizacao'],
       };
-      
-      let sector = typeof category === 'string' ? category : 'TI';
-      let product = '';
       
       // Tentar extrair setor do texto
       for (const [sectorName, patterns] of Object.entries(sectorPatterns)) {
@@ -205,25 +241,6 @@ serve(async (req) => {
         if (patterns.some(p => text.includes(p))) {
           product = productName;
           break;
-        }
-      }
-      
-      // Se categoria do GLPI já contém informação útil, usar
-      if (typeof category === 'string') {
-        // Verificar se categoria contém padrão "Setor > Produto" ou similar
-        const categoryParts = category.split(/[>\/\-|]/);
-        if (categoryParts.length >= 2) {
-          sector = categoryParts[0].trim() || sector;
-          product = categoryParts[1].trim() || product;
-        } else if (!product && category.trim()) {
-          // Se só tem uma parte, pode ser o produto
-          const catLower = category.toLowerCase();
-          for (const [productName, patterns] of Object.entries(productPatterns)) {
-            if (patterns.some(p => catLower.includes(p))) {
-              product = productName;
-              break;
-            }
-          }
         }
       }
       
