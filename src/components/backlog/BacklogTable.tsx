@@ -16,8 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { BacklogTask, TaskStatus, TaskPriority, TaskTag } from "@/types";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Download, AlertTriangle, Clock, UserX, Flame, Link2, Eye } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, Download, AlertTriangle, Clock, UserX, Flame, Link2, Eye, ChevronDown, ChevronUp } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { TaskDetailSheet } from "./TaskDetailSheet";
@@ -122,6 +127,20 @@ export function BacklogTable({
 }: BacklogTableProps) {
   const [selectedTask, setSelectedTask] = useState<BacklogTask | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+
+  const toggleRowExpansion = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
 
   const handleRowClick = (task: BacklogTask) => {
     setSelectedTask(task);
@@ -185,137 +204,171 @@ export function BacklogTable({
 
   return (
     <div className="rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <div>
-          <h3 className="font-semibold text-sm">Tabela de Backlog</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {totalTasks} tarefa{totalTasks !== 1 ? "s" : ""} encontrada{totalTasks !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" className="h-8" onClick={onExport}>
-          <Download className="h-3 w-3 mr-1.5" />
-          Exportar XLS
+      <div className="flex items-center justify-between p-3 border-b border-border">
+        <span className="text-xs text-muted-foreground">
+          {totalTasks} tarefa{totalTasks !== 1 ? "s" : ""}
+        </span>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onExport}>
+          <Download className="h-3 w-3 mr-1" />
+          Exportar
         </Button>
       </div>
 
       <div className="overflow-x-auto">
         <Table>
           <TableHeader>
-            <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[90px]">
+            <TableRow className="hover:bg-transparent text-xs">
+              <TableHead className="w-[40px] px-2"></TableHead>
+              <TableHead className="w-[80px] px-2">
                 <SortHeader column="id" label="ID" />
               </TableHead>
-              <TableHead className="min-w-[180px]">
+              <TableHead className="min-w-[250px] px-2">
                 <SortHeader column="title" label="Descrição" />
               </TableHead>
-              <TableHead className="w-[110px]">
+              <TableHead className="w-[100px] px-2">
                 <SortHeader column="status" label="Status" />
               </TableHead>
-              <TableHead className="w-[90px]">
+              <TableHead className="w-[80px] px-2">
                 <SortHeader column="priority" label="Prioridade" />
               </TableHead>
-              <TableHead className="w-[120px]">
-                <SortHeader column="client" label="Cliente" />
-              </TableHead>
-              <TableHead className="w-[110px]">
-                <SortHeader column="assignee" label="Responsável" />
-              </TableHead>
-              <TableHead className="w-[90px]">
+              <TableHead className="w-[100px] px-2">
                 <SortHeader column="sector" label="Setor" />
               </TableHead>
-              <TableHead className="w-[90px]">
+              <TableHead className="w-[120px] px-2">Produto</TableHead>
+              <TableHead className="w-[100px] px-2">
+                <SortHeader column="assignee" label="Responsável" />
+              </TableHead>
+              <TableHead className="w-[80px] px-2">
                 <SortHeader column="openedAt" label="Abertura" />
               </TableHead>
-              <TableHead className="w-[70px] text-right">
-                <SortHeader column="daysSinceLastAction" label="Parado" className="justify-end ml-auto -mr-3" />
+              <TableHead className="w-[60px] px-2 text-right">
+                <SortHeader column="daysSinceLastAction" label="Dias" className="justify-end ml-auto -mr-2" />
               </TableHead>
-              <TableHead className="w-[100px]">Tags</TableHead>
+              <TableHead className="w-[70px] px-2">Tags</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tasks.map((task) => {
               const aging = getAgingDisplay(task.daysSinceLastAction);
+              const isExpanded = expandedRows.has(task.id);
+              const taskContent = getTaskContent(task.id);
+              const extendedTask = task as BacklogTask & { product?: string };
+              
               return (
-                <TableRow 
-                  key={task.id} 
-                  className={cn("cursor-pointer", getRowHighlight(task))}
-                  onClick={() => handleRowClick(task)}
-                >
-                  <TableCell className="font-mono text-xs">{task.id}</TableCell>
-                  <TableCell className="font-medium text-sm max-w-[200px] truncate" title={task.title}>
-                    {task.title}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-xs whitespace-nowrap", statusColors[task.status])}
+                <Collapsible key={task.id} open={isExpanded} asChild>
+                  <>
+                    <TableRow 
+                      className={cn("cursor-pointer text-xs", getRowHighlight(task))}
                     >
-                      {statusLabels[task.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-xs", priorityColors[task.priority])}
-                    >
-                      {priorityLabels[task.priority]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm truncate max-w-[120px]" title={task.client}>
-                    {task.client}
-                  </TableCell>
-                  <TableCell className="text-sm truncate max-w-[110px]" title={task.assignee}>
-                    {task.assignee}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {task.sector}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
-                    {format(task.openedAt, "dd/MM/yy")}
-                  </TableCell>
-                  <TableCell className={cn("text-right text-sm", aging.class)}>
-                    {aging.text}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1">
-                      <div className="flex gap-0.5">
-                        {task.tags.slice(0, 2).map((tag) => {
-                          const Icon = tagIcons[tag];
-                          return (
-                            <span
-                              key={tag}
-                              title={tagLabels[tag]}
-                              className={cn("p-0.5", tagColors[tag])}
-                            >
-                              <Icon className="h-3.5 w-3.5" />
-                            </span>
-                          );
-                        })}
-                        {task.tags.length > 2 && (
-                          <span className="text-xs text-muted-foreground">
-                            +{task.tags.length - 2}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 w-6 p-0 ml-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRowClick(task);
-                        }}
+                      <TableCell className="px-2">
+                        <CollapsibleTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={(e) => toggleRowExpansion(task.id, e)}
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs px-2" onClick={() => handleRowClick(task)}>
+                        {task.id.replace('GLPI-', '')}
+                      </TableCell>
+                      <TableCell 
+                        className="font-medium text-xs px-2 max-w-[250px]" 
+                        onClick={() => handleRowClick(task)}
                       >
-                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                        <span className="line-clamp-2">{task.title}</span>
+                      </TableCell>
+                      <TableCell className="px-2" onClick={() => handleRowClick(task)}>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] px-1.5 py-0", statusColors[task.status])}
+                        >
+                          {statusLabels[task.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-2" onClick={() => handleRowClick(task)}>
+                        <Badge
+                          variant="outline"
+                          className={cn("text-[10px] px-1.5 py-0", priorityColors[task.priority])}
+                        >
+                          {priorityLabels[task.priority]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs px-2" onClick={() => handleRowClick(task)}>
+                        {task.sector}
+                      </TableCell>
+                      <TableCell className="text-xs px-2 text-muted-foreground" onClick={() => handleRowClick(task)}>
+                        {extendedTask.product || '-'}
+                      </TableCell>
+                      <TableCell className="text-xs px-2 truncate max-w-[100px]" title={task.assignee} onClick={() => handleRowClick(task)}>
+                        {task.assignee}
+                      </TableCell>
+                      <TableCell className="text-xs px-2 text-muted-foreground whitespace-nowrap" onClick={() => handleRowClick(task)}>
+                        {format(task.openedAt, "dd/MM/yy")}
+                      </TableCell>
+                      <TableCell className={cn("text-right text-xs px-2", aging.class)} onClick={() => handleRowClick(task)}>
+                        {aging.text}
+                      </TableCell>
+                      <TableCell className="px-2">
+                        <div className="flex items-center gap-0.5">
+                          {task.tags.slice(0, 2).map((tag) => {
+                            const Icon = tagIcons[tag];
+                            return (
+                              <span
+                                key={tag}
+                                title={tagLabels[tag]}
+                                className={cn("p-0.5", tagColors[tag])}
+                              >
+                                <Icon className="h-3 w-3" />
+                              </span>
+                            );
+                          })}
+                          {task.tags.length > 2 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{task.tags.length - 2}
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 ml-0.5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRowClick(task);
+                            }}
+                          >
+                            <Eye className="h-3 w-3 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    <CollapsibleContent asChild>
+                      <TableRow className="bg-muted/30 hover:bg-muted/40">
+                        <TableCell colSpan={11} className="px-4 py-3">
+                          <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground">Descrição Completa:</div>
+                            <div 
+                              className="text-sm prose prose-sm max-w-none bg-background rounded-md p-3 border"
+                              dangerouslySetInnerHTML={{ __html: taskContent || task.title }}
+                            />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    </CollapsibleContent>
+                  </>
+                </Collapsible>
               );
             })}
             {tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
                   Nenhuma tarefa encontrada
                 </TableCell>
               </TableRow>
