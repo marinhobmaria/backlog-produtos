@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { AppLayout } from "@/components/layout/AppLayout";
 import { useBacklogData } from "@/hooks/useBacklogData";
 import { BacklogFiltersComponent } from "@/components/backlog/BacklogFilters";
 import { BacklogTable } from "@/components/backlog/BacklogTable";
@@ -7,10 +7,10 @@ import { OperationalAlerts } from "@/components/backlog/OperationalAlerts";
 import { StatusChart } from "@/components/backlog/StatusChart";
 import { AgingChart } from "@/components/backlog/AgingChart";
 import { TimelineChart } from "@/components/backlog/TimelineChart";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft, LayoutDashboard, ClipboardList, RefreshCw, Loader2 } from "lucide-react";
 
 export default function Backlog() {
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  
   const {
     tasks,
     totalTasks,
@@ -48,49 +48,21 @@ export default function Backlog() {
     document.documentElement.classList.add("light");
   }, []);
 
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-4">
-            <Link to="/">
-              <Button variant="ghost" size="sm" className="h-8">
-                <ArrowLeft className="h-4 w-4 mr-1.5" />
-                Voltar
-              </Button>
-            </Link>
-            <div className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-primary" />
-              <h1 className="text-lg font-bold">Backlog Operacional</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-8" 
-              onClick={refetch}
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              <span className="ml-1.5 hidden sm:inline">Atualizar</span>
-            </Button>
-            <Link to="/dashboard-executivo">
-              <Button variant="outline" size="sm" className="h-8">
-                <LayoutDashboard className="h-4 w-4 mr-1.5" />
-                Visão Executiva
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+  const handleRefresh = async () => {
+    await refetch();
+    setLastUpdated(new Date());
+  };
 
-      <main className="container mx-auto px-4 py-6 space-y-4">
+  return (
+    <AppLayout onRefresh={handleRefresh} isRefreshing={isLoading} lastUpdated={lastUpdated}>
+      <div className="container mx-auto px-4 py-6 space-y-4">
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold tracking-tight">Backlog Operacional</h1>
+          <p className="text-muted-foreground mt-1">
+            Gerencie e acompanhe os tickets do GLPI
+          </p>
+        </div>
+
         {/* Filters */}
         <BacklogFiltersComponent
           filters={filters}
@@ -133,14 +105,7 @@ export default function Backlog() {
           <AgingChart data={agingBuckets} />
           <TimelineChart data={dailyOpenings} />
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border mt-8 py-4">
-        <div className="container mx-auto px-4 text-center text-xs text-muted-foreground">
-          <p>Dados atualizados automaticamente • Última atualização: agora</p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </AppLayout>
   );
 }
