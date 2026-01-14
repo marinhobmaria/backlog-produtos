@@ -7,9 +7,12 @@ import { OperationalAlerts } from "@/components/backlog/OperationalAlerts";
 import { StatusChart } from "@/components/backlog/StatusChart";
 import { AgingChart } from "@/components/backlog/AgingChart";
 import { TimelineChart } from "@/components/backlog/TimelineChart";
+import { Badge } from "@/components/ui/badge";
+import { Package } from "lucide-react";
 
-export default function Backlog() {
+export default function Produtos() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const selectedProduct = "Saúde Simples"; // Por enquanto fixo
   
   const {
     tasks,
@@ -56,8 +59,15 @@ export default function Backlog() {
 
   return (
     <AppLayout onRefresh={handleRefresh} isRefreshing={isLoading} lastUpdated={lastUpdated}>
-      <div className="container mx-auto px-4 py-6 space-y-4">
-        <h1 className="text-2xl font-bold tracking-tight mb-4">Backlog</h1>
+      <div className="container mx-auto px-4 py-4 space-y-4">
+        {/* Header with product badge */}
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold tracking-tight">Produtos</h1>
+          <Badge variant="secondary" className="flex items-center gap-1.5 px-2.5 py-1">
+            <Package className="h-3.5 w-3.5" />
+            {selectedProduct}
+          </Badge>
+        </div>
 
         {/* Filters */}
         <BacklogFiltersComponent
@@ -98,7 +108,7 @@ export default function Backlog() {
           openTasks={tasks.filter(t => t.status !== 'closed' && t.status !== 'resolved').length}
         />
 
-        {/* Charts Row - Dashboards after indicadores */}
+        {/* Charts Row */}
         <div className="grid gap-4 md:grid-cols-3">
           <StatusChart data={statusCounts} onStatusClick={filterByStatus} />
           <AgingChart data={agingBuckets} />
