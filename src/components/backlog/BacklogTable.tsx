@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -16,9 +17,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BacklogTask, TaskStatus, TaskPriority, TaskTag } from "@/types";
-import { ArrowUpDown, ChevronLeft, ChevronRight, Download, AlertTriangle, Clock, UserX, Flame, Link2 } from "lucide-react";
+import { ArrowUpDown, ChevronLeft, ChevronRight, Download, AlertTriangle, Clock, UserX, Flame, Link2, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { TaskDetailSheet } from "./TaskDetailSheet";
+
+interface TaskContent {
+  id: string;
+  content?: string;
+  history?: Array<{
+    id: string;
+    date: string;
+    user: string;
+    action: string;
+    content?: string;
+  }>;
+}
 
 interface BacklogTableProps {
   tasks: BacklogTask[];
@@ -32,6 +46,7 @@ interface BacklogTableProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   onExport: () => void;
+  taskContents?: Record<string, TaskContent>;
 }
 
 const statusLabels: Record<TaskStatus, string> = {
@@ -103,7 +118,23 @@ export function BacklogTable({
   onPageChange,
   onPageSizeChange,
   onExport,
+  taskContents = {},
 }: BacklogTableProps) {
+  const [selectedTask, setSelectedTask] = useState<BacklogTask | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  const handleRowClick = (task: BacklogTask) => {
+    setSelectedTask(task);
+    setSheetOpen(true);
+  };
+
+  const getTaskContent = (taskId: string) => {
+    return taskContents[taskId]?.content;
+  };
+
+  const getTaskHistory = (taskId: string) => {
+    return taskContents[taskId]?.history || [];
+  };
   const SortHeader = ({
     column,
     label,
@@ -205,7 +236,11 @@ export function BacklogTable({
             {tasks.map((task) => {
               const aging = getAgingDisplay(task.daysSinceLastAction);
               return (
-                <TableRow key={task.id} className={cn("cursor-pointer", getRowHighlight(task))}>
+                <TableRow 
+                  key={task.id} 
+                  className={cn("cursor-pointer", getRowHighlight(task))}
+                  onClick={() => handleRowClick(task)}
+                >
                   <TableCell className="font-mono text-xs">{task.id}</TableCell>
                   <TableCell className="font-medium text-sm max-w-[200px] truncate" title={task.title}>
                     {task.title}
@@ -242,24 +277,37 @@ export function BacklogTable({
                     {aging.text}
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-0.5">
-                      {task.tags.slice(0, 3).map((tag) => {
-                        const Icon = tagIcons[tag];
-                        return (
-                          <span
-                            key={tag}
-                            title={tagLabels[tag]}
-                            className={cn("p-0.5", tagColors[tag])}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-1">
+                      <div className="flex gap-0.5">
+                        {task.tags.slice(0, 2).map((tag) => {
+                          const Icon = tagIcons[tag];
+                          return (
+                            <span
+                              key={tag}
+                              title={tagLabels[tag]}
+                              className={cn("p-0.5", tagColors[tag])}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                            </span>
+                          );
+                        })}
+                        {task.tags.length > 2 && (
+                          <span className="text-xs text-muted-foreground">
+                            +{task.tags.length - 2}
                           </span>
-                        );
-                      })}
-                      {task.tags.length > 3 && (
-                        <span className="text-xs text-muted-foreground ml-0.5">
-                          +{task.tags.length - 3}
-                        </span>
-                      )}
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 ml-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRowClick(task);
+                        }}
+                      >
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -322,6 +370,15 @@ export function BacklogTable({
           </div>
         </div>
       </div>
+
+      {/* Task Detail Sheet */}
+      <TaskDetailSheet
+        task={selectedTask}
+        open={sheetOpen}
+        onOpenChange={setSheetOpen}
+        content={selectedTask ? getTaskContent(selectedTask.id) : undefined}
+        history={selectedTask ? getTaskHistory(selectedTask.id) : []}
+      />
     </div>
   );
 }

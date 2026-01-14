@@ -42,6 +42,7 @@ export default function Backlog() {
     isLoading,
     error,
     refetch,
+    taskContents,
   } = useBacklogData();
 
   useEffect(() => {
@@ -90,6 +91,7 @@ export default function Backlog() {
           onPageChange={setCurrentPage}
           onPageSizeChange={setPageSize}
           onExport={exportToXLS}
+          taskContents={taskContents}
         />
 
         {/* Indicadores - abaixo da tabela */}
