@@ -331,10 +331,25 @@ const Configuracoes = () => {
                 </div>
               </div>
 
-              <Button onClick={handleSave} size="sm" className="w-full mt-2">
-                <Save className="h-3 w-3 mr-2" />
-                Salvar Configurações
-              </Button>
+              <div className="flex gap-2 mt-3">
+                <Button onClick={handleSave} size="sm" variant="outline" className="flex-1">
+                  <Save className="h-3 w-3 mr-2" />
+                  Salvar
+                </Button>
+                <Button 
+                  onClick={handleTestConnection} 
+                  size="sm" 
+                  className="flex-1"
+                  disabled={isTesting}
+                >
+                  {isTesting ? (
+                    <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3 mr-2" />
+                  )}
+                  Testar Conexão
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
