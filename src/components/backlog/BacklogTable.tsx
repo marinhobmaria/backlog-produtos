@@ -203,12 +203,12 @@ export function BacklogTable({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card">
-      <div className="flex items-center justify-between p-3 border-b border-border">
+    <div className="rounded-lg border border-border bg-card">
+      <div className="flex items-center justify-between p-2 border-b border-border">
         <span className="text-xs text-muted-foreground">
           {totalTasks} tarefa{totalTasks !== 1 ? "s" : ""}
         </span>
-        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onExport}>
+        <Button variant="outline" size="sm" className="h-6 text-xs px-2" onClick={onExport}>
           <Download className="h-3 w-3 mr-1" />
           Exportar
         </Button>
@@ -351,14 +351,12 @@ export function BacklogTable({
                     </TableRow>
                     <CollapsibleContent asChild>
                       <TableRow className="bg-muted/30 hover:bg-muted/40">
-                        <TableCell colSpan={11} className="px-4 py-3">
-                          <div className="space-y-2">
-                            <div className="text-xs font-medium text-muted-foreground">Descrição Completa:</div>
-                            <div 
-                              className="text-sm prose prose-sm max-w-none bg-background rounded-md p-3 border"
-                              dangerouslySetInnerHTML={{ __html: taskContent || task.title }}
-                            />
-                          </div>
+                        <TableCell colSpan={11} className="p-0">
+                          <div 
+                            className="text-sm prose prose-sm max-w-none p-4 overflow-auto"
+                            style={{ maxHeight: '60vh', minHeight: '100px' }}
+                            dangerouslySetInnerHTML={{ __html: taskContent || task.title }}
+                          />
                         </TableCell>
                       </TableRow>
                     </CollapsibleContent>
@@ -378,43 +376,43 @@ export function BacklogTable({
       </div>
 
       {/* Pagination */}
-      <div className="flex items-center justify-between p-4 border-t border-border">
+      <div className="flex items-center justify-between p-2 border-t border-border">
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Itens por página:</span>
+          <span className="text-[11px] text-muted-foreground">Por página:</span>
           <Select
             value={String(pageSize)}
             onValueChange={(v) => onPageSizeChange(Number(v))}
           >
-            <SelectTrigger className="h-8 w-[70px]">
+            <SelectTrigger className="h-7 w-[60px] text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="10">10</SelectItem>
               <SelectItem value="15">15</SelectItem>
               <SelectItem value="25">25</SelectItem>
               <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
             </SelectContent>
           </Select>
         </div>
 
-        <div className="flex items-center gap-4">
-          <p className="text-xs text-muted-foreground">
-            Página {currentPage} de {totalPages}
+        <div className="flex items-center gap-3">
+          <p className="text-[11px] text-muted-foreground">
+            {currentPage}/{totalPages}
           </p>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 p-0"
               disabled={currentPage === 1}
               onClick={() => onPageChange(currentPage - 1)}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="h-7 w-7 p-0"
               disabled={currentPage === totalPages || totalPages === 0}
               onClick={() => onPageChange(currentPage + 1)}
             >

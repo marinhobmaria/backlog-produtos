@@ -70,7 +70,7 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="container mx-auto flex h-12 items-center justify-between px-4">
+        <div className="w-full flex h-11 items-center justify-between px-3">
           {/* Logo + Nav */}
           <div className="flex items-center gap-4">
             <Link to="/produtos" className="flex items-center gap-2">
