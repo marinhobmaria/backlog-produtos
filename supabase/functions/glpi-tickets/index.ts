@@ -163,6 +163,73 @@ serve(async (req) => {
       2: 'request',   // Requisição
     };
 
+    // Função para extrair setor e produto do nome/conteúdo do ticket
+    const extractSectorAndProduct = (name: string, content: string, category: string | number) => {
+      const text = `${name} ${content}`.toLowerCase();
+      
+      // Padrões conhecidos para extração
+      const sectorPatterns: Record<string, string[]> = {
+        'Produtos': ['produtos', 'produto', 'desenvolvimento', 'dev'],
+        'Suporte': ['suporte', 'atendimento', 'helpdesk'],
+        'Infraestrutura': ['infra', 'infraestrutura', 'servidores', 'rede'],
+        'Comercial': ['comercial', 'vendas', 'contrato'],
+        'Financeiro': ['financeiro', 'cobrança', 'pagamento'],
+      };
+      
+      const productPatterns: Record<string, string[]> = {
+        'Saúde Simples': ['saúde simples', 'saude simples', 'saudesimples'],
+        'OM30': ['om30', 'om 30'],
+        'e-SUS': ['e-sus', 'esus', 'e sus'],
+        'Gestão': ['gestão', 'gestao'],
+        'Prontuário': ['prontuário', 'prontuario', 'pep'],
+        'Faturamento': ['faturamento', 'fat'],
+        'Estoque': ['estoque', 'almoxarifado'],
+        'Farmácia': ['farmácia', 'farmacia'],
+        'Laboratório': ['laboratório', 'laboratorio', 'lab'],
+        'Agendamento': ['agendamento', 'agenda'],
+      };
+      
+      let sector = typeof category === 'string' ? category : 'TI';
+      let product = '';
+      
+      // Tentar extrair setor do texto
+      for (const [sectorName, patterns] of Object.entries(sectorPatterns)) {
+        if (patterns.some(p => text.includes(p))) {
+          sector = sectorName;
+          break;
+        }
+      }
+      
+      // Tentar extrair produto do texto
+      for (const [productName, patterns] of Object.entries(productPatterns)) {
+        if (patterns.some(p => text.includes(p))) {
+          product = productName;
+          break;
+        }
+      }
+      
+      // Se categoria do GLPI já contém informação útil, usar
+      if (typeof category === 'string') {
+        // Verificar se categoria contém padrão "Setor > Produto" ou similar
+        const categoryParts = category.split(/[>\/\-|]/);
+        if (categoryParts.length >= 2) {
+          sector = categoryParts[0].trim() || sector;
+          product = categoryParts[1].trim() || product;
+        } else if (!product && category.trim()) {
+          // Se só tem uma parte, pode ser o produto
+          const catLower = category.toLowerCase();
+          for (const [productName, patterns] of Object.entries(productPatterns)) {
+            if (patterns.some(p => catLower.includes(p))) {
+              product = productName;
+              break;
+            }
+          }
+        }
+      }
+      
+      return { sector, product };
+    };
+
     // Transformar tickets para o formato do backlog
     const backlogTasks = allTicketsWithHistory.map((ticket) => {
       const openedAt = new Date(ticket.date);
@@ -184,6 +251,13 @@ serve(async (req) => {
         content: followup.content?.replace(/<[^>]*>/g, '').substring(0, 500) || '',
       }));
 
+      // Extrair setor e produto
+      const { sector, product } = extractSectorAndProduct(
+        ticket.name, 
+        ticket.content || '', 
+        ticket.itilcategories_id
+      );
+
       return {
         id: `GLPI-${ticket.id}`,
         title: ticket.name,
@@ -193,7 +267,8 @@ serve(async (req) => {
         assignee: typeof ticket.users_id_recipient === 'string' ? ticket.users_id_recipient : 'Não atribuído',
         squad: 'Suporte',
         client: typeof ticket.entities_id === 'string' ? ticket.entities_id : 'OM30',
-        sector: typeof ticket.itilcategories_id === 'string' ? ticket.itilcategories_id : 'TI',
+        sector,
+        product,
         tags,
         openedAt: ticket.date,
         lastUpdatedAt: ticket.date_mod,

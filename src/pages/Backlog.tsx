@@ -57,12 +57,7 @@ export default function Backlog() {
   return (
     <AppLayout onRefresh={handleRefresh} isRefreshing={isLoading} lastUpdated={lastUpdated}>
       <div className="container mx-auto px-4 py-6 space-y-4">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold tracking-tight">Backlog Operacional</h1>
-          <p className="text-muted-foreground mt-1">
-            Gerencie e acompanhe os tickets do GLPI
-          </p>
-        </div>
+        <h1 className="text-2xl font-bold tracking-tight mb-4">Backlog</h1>
 
         {/* Filters */}
         <BacklogFiltersComponent
