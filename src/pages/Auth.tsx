@@ -6,12 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/hooks/use-toast";
-import { ClipboardList, Loader2, Eye, EyeOff } from "lucide-react";
+import { Package, Loader2, Eye, EyeOff } from "lucide-react";
 import { z } from "zod";
 
 const emailSchema = z.string().email("Email inválido");
 const passwordSchema = z.string().min(6, "Senha deve ter no mínimo 6 caracteres");
+
+const PRODUCTS = [
+  { id: "saude-simples", name: "Saúde Simples" },
+  { id: "om30", name: "OM30" },
+  { id: "esus", name: "e-SUS" },
+  { id: "gestao", name: "Gestão" },
+];
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -19,6 +33,7 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("saude-simples");
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
   useEffect(() => {
@@ -26,18 +41,20 @@ const Auth = () => {
     
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
-        navigate("/");
+        // Store selected product in localStorage
+        localStorage.setItem("selectedProduct", selectedProduct);
+        navigate("/produtos");
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        navigate("/");
+        navigate("/produtos");
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, selectedProduct]);
 
   const validateForm = () => {
     const newErrors: { email?: string; password?: string } = {};
@@ -62,6 +79,7 @@ const Auth = () => {
     if (!validateForm()) return;
     
     setIsLoading(true);
+    localStorage.setItem("selectedProduct", selectedProduct);
     
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -79,7 +97,7 @@ const Auth = () => {
     } else {
       toast({
         title: "Bem-vindo!",
-        description: "Login realizado com sucesso",
+        description: `Acessando ${PRODUCTS.find(p => p.id === selectedProduct)?.name}`,
       });
     }
     
@@ -92,8 +110,9 @@ const Auth = () => {
     if (!validateForm()) return;
     
     setIsLoading(true);
+    localStorage.setItem("selectedProduct", selectedProduct);
     
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = `${window.location.origin}/produtos`;
     
     const { error } = await supabase.auth.signUp({
       email,
@@ -129,17 +148,36 @@ const Auth = () => {
         <CardHeader className="text-center space-y-4">
           <div className="flex justify-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
-              <ClipboardList className="h-8 w-8 text-primary" />
+              <Package className="h-8 w-8 text-primary" />
             </div>
           </div>
           <div>
-            <CardTitle className="text-2xl font-bold">Backlog</CardTitle>
+            <CardTitle className="text-2xl font-bold">Produtos</CardTitle>
             <CardDescription className="mt-1">
               Sistema de Gestão de Tickets GLPI
             </CardDescription>
           </div>
         </CardHeader>
         <CardContent>
+          {/* Product Selection */}
+          <div className="mb-6">
+            <Label htmlFor="product" className="text-sm font-medium">
+              Selecione o produto
+            </Label>
+            <Select value={selectedProduct} onValueChange={setSelectedProduct}>
+              <SelectTrigger className="mt-1.5">
+                <SelectValue placeholder="Escolha um produto" />
+              </SelectTrigger>
+              <SelectContent>
+                {PRODUCTS.map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6">
               <TabsTrigger value="login">Entrar</TabsTrigger>
@@ -262,12 +300,6 @@ const Auth = () => {
               </form>
             </TabsContent>
           </Tabs>
-          
-          <div className="mt-6 pt-4 border-t text-center">
-            <p className="text-xs text-muted-foreground">
-              Acesso padrão: maria.marinho@om30.com.br
-            </p>
-          </div>
         </CardContent>
       </Card>
     </div>

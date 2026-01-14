@@ -19,7 +19,8 @@ import {
   RefreshCw,
   ChevronDown,
   Copy,
-  Server
+  Server,
+  Wifi
 } from "lucide-react";
 
 interface GlpiConfig {
@@ -34,6 +35,14 @@ interface ConnectionResult {
   apiResponse?: string;
   ticketsCount?: number;
   timestamp?: Date;
+}
+
+interface SyncHistoryItem {
+  id: string;
+  timestamp: Date;
+  success: boolean;
+  message: string;
+  ticketsCount?: number;
 }
 
 const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000;
@@ -55,7 +64,8 @@ const Configuracoes = () => {
   });
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [nextAutoRefresh, setNextAutoRefresh] = useState<Date | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(true);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
 
   useEffect(() => {
     document.documentElement.classList.add("light");
@@ -82,6 +92,12 @@ const Configuracoes = () => {
           apiResponse: JSON.stringify(error, null, 2),
           timestamp: now,
         });
+        setSyncHistory(prev => [{
+          id: crypto.randomUUID(),
+          timestamp: now,
+          success: false,
+          message: "Erro na requisição"
+        }, ...prev.slice(0, 9)]);
       } else if (data?.success) {
         setConnectionResult({
           status: "success",
@@ -90,6 +106,13 @@ const Configuracoes = () => {
           apiResponse: JSON.stringify(data, null, 2),
           timestamp: now,
         });
+        setSyncHistory(prev => [{
+          id: crypto.randomUUID(),
+          timestamp: now,
+          success: true,
+          message: "Sincronização OK",
+          ticketsCount: data.total || 0
+        }, ...prev.slice(0, 9)]);
         toast({
           title: "Conexão OK",
           description: `${data.total || 0} tickets encontrados`,
@@ -101,6 +124,12 @@ const Configuracoes = () => {
           apiResponse: JSON.stringify(data, null, 2),
           timestamp: now,
         });
+        setSyncHistory(prev => [{
+          id: crypto.randomUUID(),
+          timestamp: now,
+          success: false,
+          message: data?.error || "Erro"
+        }, ...prev.slice(0, 9)]);
       }
     } catch (err) {
       const now = new Date();
@@ -113,6 +142,12 @@ const Configuracoes = () => {
         apiResponse: err instanceof Error ? err.message : String(err),
         timestamp: now,
       });
+      setSyncHistory(prev => [{
+        id: crypto.randomUUID(),
+        timestamp: now,
+        success: false,
+        message: "Erro de rede"
+      }, ...prev.slice(0, 9)]);
     } finally {
       setIsTesting(false);
     }
@@ -201,73 +236,72 @@ const Configuracoes = () => {
 
   return (
     <AppLayout onRefresh={handleTestConnection} isRefreshing={isTesting} lastUpdated={lastUpdated}>
-      <div className="container mx-auto px-4 py-4 max-w-4xl">
-        {/* Status Bar */}
-        <div className={`rounded-lg p-3 mb-4 flex items-center justify-between ${
-          connectionResult.status === "success" 
-            ? "bg-green-50 border border-green-200" 
-            : connectionResult.status === "error" 
-              ? "bg-red-50 border border-red-200" 
-              : "bg-muted/50 border"
-        }`}>
-          <div className="flex items-center gap-3">
-            {connectionResult.status === "success" ? (
-              <CheckCircle2 className="h-5 w-5 text-green-600" />
-            ) : connectionResult.status === "error" ? (
-              <XCircle className="h-5 w-5 text-red-600" />
-            ) : (
-              <Server className="h-5 w-5 text-muted-foreground" />
-            )}
-            <div>
-              <span className={`font-medium ${
-                connectionResult.status === "success" 
-                  ? "text-green-700" 
-                  : connectionResult.status === "error" 
-                    ? "text-red-700" 
-                    : "text-foreground"
-              }`}>
-                {connectionResult.status === "success" 
-                  ? "Conectado" 
-                  : connectionResult.status === "error" 
-                    ? "Erro" 
-                    : "Aguardando teste"}
-              </span>
-              {connectionResult.message && (
-                <span className="text-sm text-muted-foreground ml-2">
-                  — {connectionResult.message}
-                </span>
-              )}
+      <div className="container mx-auto px-4 py-4 max-w-4xl space-y-4">
+        <h1 className="text-xl font-bold tracking-tight">Configurações</h1>
+
+        {/* Connection Status Card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Wifi className="h-4 w-4" />
+              Status de Conexão GLPI
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`rounded-lg p-3 flex items-center justify-between ${
+              connectionResult.status === "success" 
+                ? "bg-green-50 border border-green-200" 
+                : connectionResult.status === "error" 
+                  ? "bg-red-50 border border-red-200" 
+                  : "bg-muted/50 border"
+            }`}>
+              <div className="flex items-center gap-3">
+                {connectionResult.status === "success" ? (
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                ) : connectionResult.status === "error" ? (
+                  <XCircle className="h-5 w-5 text-red-600" />
+                ) : (
+                  <Server className="h-5 w-5 text-muted-foreground" />
+                )}
+                <div>
+                  <span className={`font-medium ${
+                    connectionResult.status === "success" 
+                      ? "text-green-700" 
+                      : connectionResult.status === "error" 
+                        ? "text-red-700" 
+                        : "text-foreground"
+                  }`}>
+                    {connectionResult.status === "success" 
+                      ? "Conectado" 
+                      : connectionResult.status === "error" 
+                        ? "Erro" 
+                        : "Aguardando teste"}
+                  </span>
+                  {connectionResult.message && (
+                    <span className="text-sm text-muted-foreground ml-2">
+                      — {connectionResult.message}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {connectionResult.timestamp && (
+                  <span className="text-xs text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatTime(connectionResult.timestamp)}
+                  </span>
+                )}
+                <Badge variant="outline" className="text-xs">
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  {timeUntilRefresh}
+                </Badge>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            {connectionResult.timestamp && (
-              <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {formatTime(connectionResult.timestamp)}
-              </span>
-            )}
-            <Badge variant="outline" className="text-xs">
-              <RefreshCw className="h-3 w-3 mr-1" />
-              {timeUntilRefresh}
-            </Badge>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTestConnection}
-              disabled={isTesting}
-              className="h-7 px-2"
-            >
-              {isTesting ? (
-                <Loader2 className="h-3 w-3 animate-spin" />
-              ) : (
-                <RefreshCw className="h-3 w-3" />
-              )}
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {/* Config Card */}
+          {/* Credentials Card */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Credenciais GLPI</CardTitle>
@@ -347,61 +381,96 @@ const Configuracoes = () => {
                   ) : (
                     <RefreshCw className="h-3 w-3 mr-2" />
                   )}
-                  Testar Conexão
+                  Testar
                 </Button>
               </div>
             </CardContent>
           </Card>
 
-          {/* Response Card */}
+          {/* Sync History Card */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">Resposta da API</CardTitle>
-                {connectionResult.apiResponse && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-2"
-                    onClick={() => copyToClipboard(connectionResult.apiResponse || "")}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                )}
-              </div>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                Histórico de Sincronização
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {connectionResult.apiResponse ? (
-                <div className="space-y-3">
-                  {errorSolution && (
-                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs">
-                      <p className="font-medium text-amber-800">{errorSolution.title}</p>
-                      <p className="text-amber-700 mt-1">→ {errorSolution.solution}</p>
-                    </div>
-                  )}
-                  <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
-                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                      <ChevronDown className={`h-3 w-3 transition-transform ${isDetailsOpen ? "" : "-rotate-90"}`} />
-                      JSON completo
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-48 font-mono">
-                        {connectionResult.apiResponse}
-                      </pre>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </div>
+              {syncHistory.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhuma sincronização realizada
+                </p>
               ) : (
-                <div className="text-sm text-muted-foreground text-center py-8">
-                  Clique em atualizar para testar a conexão
+                <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                  {syncHistory.map((item) => (
+                    <div 
+                      key={item.id} 
+                      className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        {item.success ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5 text-destructive" />
+                        )}
+                        <span className="text-xs">{item.message}</span>
+                        {item.ticketsCount !== undefined && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {item.ticketsCount}
+                          </Badge>
+                        )}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatTime(item.timestamp)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
 
+        {/* API Response Card */}
+        {connectionResult.apiResponse && (
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Resposta da API</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2"
+                  onClick={() => copyToClipboard(connectionResult.apiResponse || "")}
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {errorSolution && (
+                <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs mb-3">
+                  <p className="font-medium text-amber-800">{errorSolution.title}</p>
+                  <p className="text-amber-700 mt-1">→ {errorSolution.solution}</p>
+                </div>
+              )}
+              <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+                <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                  <ChevronDown className={`h-3 w-3 transition-transform ${isDetailsOpen ? "" : "-rotate-90"}`} />
+                  JSON completo
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-48 font-mono">
+                    {connectionResult.apiResponse}
+                  </pre>
+                </CollapsibleContent>
+              </Collapsible>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Help */}
-        <Card className="mt-4">
+        <Card>
           <CardContent className="py-3">
             <p className="text-xs text-muted-foreground">
               <strong>Dica:</strong> Os tokens são configurados nos secrets do backend. 
