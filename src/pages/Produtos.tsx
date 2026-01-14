@@ -59,12 +59,12 @@ export default function Produtos() {
 
   return (
     <AppLayout onRefresh={handleRefresh} isRefreshing={isLoading} lastUpdated={lastUpdated}>
-      <div className="container mx-auto px-4 py-4 space-y-4">
+      <div className="w-full px-3 py-3 space-y-3">
         {/* Header with product badge */}
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-bold tracking-tight">Produtos</h1>
-          <Badge variant="secondary" className="flex items-center gap-1.5 px-2.5 py-1">
-            <Package className="h-3.5 w-3.5" />
+          <h1 className="text-lg font-bold tracking-tight">Produtos</h1>
+          <Badge variant="secondary" className="flex items-center gap-1.5 px-2 py-0.5 text-xs">
+            <Package className="h-3 w-3" />
             {selectedProduct}
           </Badge>
         </div>
@@ -109,7 +109,7 @@ export default function Produtos() {
         />
 
         {/* Charts Row */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-3">
           <StatusChart data={statusCounts} onStatusClick={filterByStatus} />
           <AgingChart data={agingBuckets} />
           <TimelineChart data={dailyOpenings} />
