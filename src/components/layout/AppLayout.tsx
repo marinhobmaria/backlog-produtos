@@ -52,9 +52,8 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
   };
 
   const navItems = [
-    { label: "Dashboard", href: "/", icon: LayoutDashboard },
+    { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Backlog", href: "/backlog", icon: ClipboardList },
-    { label: "Configurações", href: "/configuracoes", icon: Settings },
   ];
 
   const handleSignOut = async () => {
@@ -81,7 +80,7 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           {/* Logo + Nav */}
           <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-2">
+            <Link to="/dashboard" className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
                 <ClipboardList className="h-5 w-5 text-primary" />
               </div>
@@ -139,20 +138,17 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
             {/* User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 gap-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10">
-                    <User className="h-4 w-4 text-primary" />
+                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <User className="h-4 w-4" />
                   </div>
-                  <span className="hidden sm:inline text-sm max-w-[150px] truncate">
-                    {user.email}
-                  </span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
-                <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">{user.email}</p>
-                  <p className="text-xs text-muted-foreground">Usuário ativo</p>
-                </div>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => navigate("/configuracoes")} className="cursor-pointer">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Configurações
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut} className="text-destructive cursor-pointer">
                   <LogOut className="h-4 w-4 mr-2" />
