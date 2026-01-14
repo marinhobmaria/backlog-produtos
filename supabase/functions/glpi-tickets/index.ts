@@ -81,6 +81,52 @@ serve(async (req) => {
     const tickets: GLPITicket[] = await ticketsResponse.json();
     console.log(`${tickets.length} tickets encontrados`);
 
+    // Buscar histórico/followups dos primeiros 50 tickets (para performance)
+    const ticketsWithHistory = await Promise.all(
+      tickets.slice(0, 50).map(async (ticket) => {
+        try {
+          // Buscar ITILFollowups (acompanhamentos)
+          const followupsResponse = await fetch(
+            `${apiUrl}/Ticket/${ticket.id}/ITILFollowup?expand_dropdowns=true`,
+            {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+                'App-Token': APP_TOKEN,
+                'Session-Token': sessionToken,
+              },
+            }
+          );
+
+          let followups: Array<{
+            id: number;
+            content: string;
+            date: string;
+            users_id: number | string;
+          }> = [];
+
+          if (followupsResponse.ok) {
+            followups = await followupsResponse.json();
+          }
+
+          return {
+            ...ticket,
+            followups,
+          };
+        } catch {
+          return { ...ticket, followups: [] };
+        }
+      })
+    );
+
+    // Adicionar tickets restantes sem histórico detalhado
+    const remainingTickets = tickets.slice(50).map((ticket) => ({
+      ...ticket,
+      followups: [],
+    }));
+
+    const allTicketsWithHistory = [...ticketsWithHistory, ...remainingTickets];
+
     // Encerrar sessão
     await fetch(`${apiUrl}/killSession`, {
       method: 'GET',
@@ -118,7 +164,7 @@ serve(async (req) => {
     };
 
     // Transformar tickets para o formato do backlog
-    const backlogTasks = tickets.map((ticket) => {
+    const backlogTasks = allTicketsWithHistory.map((ticket) => {
       const openedAt = new Date(ticket.date);
       const lastUpdatedAt = new Date(ticket.date_mod);
       const now = new Date();
@@ -128,6 +174,15 @@ serve(async (req) => {
       if (daysSinceLastAction > 7) tags.push('stale');
       if (ticket.priority >= 5) tags.push('critical');
       if (daysSinceLastAction > 14) tags.push('attention');
+
+      // Formatar histórico
+      const history = (ticket.followups || []).map((followup, index) => ({
+        id: `followup-${followup.id || index}`,
+        date: new Date(followup.date).toLocaleString('pt-BR'),
+        user: typeof followup.users_id === 'string' ? followup.users_id : 'Sistema',
+        action: 'Acompanhamento',
+        content: followup.content?.replace(/<[^>]*>/g, '').substring(0, 500) || '',
+      }));
 
       return {
         id: `GLPI-${ticket.id}`,
@@ -146,6 +201,7 @@ serve(async (req) => {
         slaDeadline: null,
         isSlaBreach: daysSinceLastAction > 5,
         content: ticket.content,
+        history,
       };
     });
 

@@ -51,8 +51,21 @@ const initialFilters: BacklogFilters = {
 
 const SAVED_FILTERS_KEY = "backlog_saved_filters";
 
+interface TaskContent {
+  id: string;
+  content?: string;
+  history?: Array<{
+    id: string;
+    date: string;
+    user: string;
+    action: string;
+    content?: string;
+  }>;
+}
+
 export function useBacklogData() {
   const [allTasks, setAllTasks] = useState<BacklogTask[]>([]);
+  const [taskContents, setTaskContents] = useState<Record<string, TaskContent>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<BacklogFilters>(initialFilters);
@@ -108,7 +121,18 @@ export function useBacklogData() {
         isSlaBreach: ticket.isSlaBreach,
       }));
 
+      // Build task contents map
+      const contents: Record<string, TaskContent> = {};
+      data.tickets.forEach((ticket: GLPITask & { history?: Array<{ id: string; date: string; user: string; action: string; content?: string }> }) => {
+        contents[ticket.id] = {
+          id: ticket.id,
+          content: ticket.content,
+          history: ticket.history || [],
+        };
+      });
+
       setAllTasks(tasks);
+      setTaskContents(contents);
       toast.success(`${tasks.length} tickets carregados do GLPI`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
@@ -561,5 +585,8 @@ export function useBacklogData() {
 
     // Export
     exportToXLS,
+
+    // Task contents for detail view
+    taskContents,
   };
 }
