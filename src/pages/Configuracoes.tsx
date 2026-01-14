@@ -1,25 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { 
   Eye, 
   EyeOff, 
   Save, 
-  TestTube2, 
   CheckCircle2, 
   XCircle, 
   Loader2,
-  Server,
-  AlertTriangle,
   Clock,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  Copy,
+  Server
 } from "lucide-react";
 
 interface GlpiConfig {
@@ -31,12 +31,12 @@ interface GlpiConfig {
 interface ConnectionResult {
   status: "success" | "error" | null;
   message: string;
-  details?: string;
+  apiResponse?: string;
   ticketsCount?: number;
   timestamp?: Date;
 }
 
-const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+const AUTO_REFRESH_INTERVAL = 5 * 60 * 1000;
 
 const Configuracoes = () => {
   const [config, setConfig] = useState<GlpiConfig>({
@@ -55,10 +55,10 @@ const Configuracoes = () => {
   });
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [nextAutoRefresh, setNextAutoRefresh] = useState<Date | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(true);
 
   useEffect(() => {
     document.documentElement.classList.add("light");
-    // Load saved config from localStorage
     const savedConfig = localStorage.getItem("glpi-config");
     if (savedConfig) {
       setConfig(JSON.parse(savedConfig));
@@ -76,71 +76,30 @@ const Configuracoes = () => {
       setNextAutoRefresh(new Date(now.getTime() + AUTO_REFRESH_INTERVAL));
 
       if (error) {
-        // Parse error details
-        let errorMessage = error.message;
-        let errorDetails = "";
-
-        try {
-          // Try to extract more details from the error
-          if (error.message.includes("401")) {
-            errorDetails = "Erro de autenticação (HTTP 401). Verifique se os tokens estão corretos.";
-          } else if (error.message.includes("404")) {
-            errorDetails = "Endpoint não encontrado (HTTP 404). Verifique a URL do GLPI.";
-          } else if (error.message.includes("500")) {
-            errorDetails = "Erro interno do servidor GLPI (HTTP 500).";
-          }
-        } catch {
-          // Keep original message
-        }
-
         setConnectionResult({
           status: "error",
-          message: "Falha na conexão com GLPI",
-          details: errorDetails || errorMessage,
+          message: "Erro na requisição",
+          apiResponse: JSON.stringify(error, null, 2),
           timestamp: now,
-        });
-        toast({
-          title: "Falha na conexão",
-          description: errorMessage,
-          variant: "destructive",
         });
       } else if (data?.success) {
         setConnectionResult({
           status: "success",
-          message: "Conexão estabelecida com sucesso",
-          ticketsCount: data.data?.length || 0,
+          message: `${data.total || 0} tickets sincronizados`,
+          ticketsCount: data.total || 0,
+          apiResponse: JSON.stringify(data, null, 2),
           timestamp: now,
         });
         toast({
-          title: "Conexão bem-sucedida",
-          description: `${data.data?.length || 0} tickets encontrados`,
+          title: "Conexão OK",
+          description: `${data.total || 0} tickets encontrados`,
         });
       } else {
-        // Parse the error from GLPI
-        let errorMessage = data?.error || "Erro desconhecido";
-        let errorDetails = "";
-
-        // Common GLPI errors
-        if (errorMessage.includes("ERROR_GLPI_LOGIN_USER_TOKEN") || errorMessage.includes("user_token")) {
-          errorDetails = "O User Token está inválido ou expirado. Gere um novo token em: GLPI → Preferências → Acesso Remoto → Regenerar Token de API.";
-        } else if (errorMessage.includes("ERROR_GLPI_LOGIN") || errorMessage.includes("App-Token")) {
-          errorDetails = "O App Token está inválido. Verifique em: GLPI → Configurar → Geral → API → Clientes de API.";
-        } else if (errorMessage.includes("ERROR_NOT_ALLOWED_IP")) {
-          errorDetails = "O IP do servidor não está autorizado. Adicione o IP nas configurações da API do GLPI.";
-        } else if (errorMessage.includes("ERROR_API_DISABLED")) {
-          errorDetails = "A API do GLPI está desabilitada. Habilite em: Configurar → Geral → API.";
-        }
-
         setConnectionResult({
           status: "error",
-          message: "Erro na autenticação GLPI",
-          details: errorDetails || errorMessage,
+          message: data?.error || "Erro desconhecido",
+          apiResponse: JSON.stringify(data, null, 2),
           timestamp: now,
-        });
-        toast({
-          title: "Falha na conexão",
-          description: "Verifique os detalhes do erro",
-          variant: "destructive",
         });
       }
     } catch (err) {
@@ -151,32 +110,24 @@ const Configuracoes = () => {
       setConnectionResult({
         status: "error",
         message: "Erro de rede",
-        details: "Não foi possível conectar ao servidor. Verifique sua conexão com a internet.",
+        apiResponse: err instanceof Error ? err.message : String(err),
         timestamp: now,
-      });
-      toast({
-        title: "Erro",
-        description: "Não foi possível testar a conexão",
-        variant: "destructive",
       });
     } finally {
       setIsTesting(false);
     }
   }, []);
 
-  // Auto-refresh every 5 minutes
   useEffect(() => {
     const interval = setInterval(() => {
       handleTestConnection();
     }, AUTO_REFRESH_INTERVAL);
 
-    // Set initial next refresh time
     setNextAutoRefresh(new Date(Date.now() + AUTO_REFRESH_INTERVAL));
 
     return () => clearInterval(interval);
   }, [handleTestConnection]);
 
-  // Update countdown every second
   const [timeUntilRefresh, setTimeUntilRefresh] = useState<string>("");
   
   useEffect(() => {
@@ -202,268 +153,250 @@ const Configuracoes = () => {
     localStorage.setItem("glpi-config", JSON.stringify(config));
     setLastUpdated(new Date());
     toast({
-      title: "Configurações salvas",
-      description: "As configurações foram salvas localmente.",
+      title: "Salvo",
+      description: "Configurações salvas localmente",
     });
   };
 
-  const formatDateTime = (date: Date) => {
-    return date.toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiado!", description: "Resposta copiada para área de transferência" });
   };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  };
+
+  const getErrorSolution = (apiResponse?: string) => {
+    if (!apiResponse) return null;
+    
+    if (apiResponse.includes("ERROR_GLPI_LOGIN_USER_TOKEN") || apiResponse.includes("user_token")) {
+      return {
+        title: "User Token Inválido",
+        solution: "GLPI → Preferências → Acesso Remoto → Regenerar Token de API"
+      };
+    }
+    if (apiResponse.includes("App-Token") || apiResponse.includes("ERROR_GLPI_LOGIN")) {
+      return {
+        title: "App Token Inválido",
+        solution: "GLPI → Configurar → Geral → API → Clientes de API"
+      };
+    }
+    if (apiResponse.includes("ERROR_NOT_ALLOWED_IP")) {
+      return {
+        title: "IP não autorizado",
+        solution: "Adicione o IP do servidor nas configurações da API do GLPI"
+      };
+    }
+    if (apiResponse.includes("ERROR_API_DISABLED")) {
+      return {
+        title: "API desabilitada",
+        solution: "GLPI → Configurar → Geral → API → Habilitar"
+      };
+    }
+    return null;
+  };
+
+  const errorSolution = getErrorSolution(connectionResult.apiResponse);
 
   return (
     <AppLayout onRefresh={handleTestConnection} isRefreshing={isTesting} lastUpdated={lastUpdated}>
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight">Configurações</h1>
-          <p className="text-muted-foreground mt-1">
-            Configure as credenciais de acesso ao GLPI
-          </p>
+      <div className="container mx-auto px-4 py-4 max-w-4xl">
+        {/* Status Bar */}
+        <div className={`rounded-lg p-3 mb-4 flex items-center justify-between ${
+          connectionResult.status === "success" 
+            ? "bg-green-50 border border-green-200" 
+            : connectionResult.status === "error" 
+              ? "bg-red-50 border border-red-200" 
+              : "bg-muted/50 border"
+        }`}>
+          <div className="flex items-center gap-3">
+            {connectionResult.status === "success" ? (
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+            ) : connectionResult.status === "error" ? (
+              <XCircle className="h-5 w-5 text-red-600" />
+            ) : (
+              <Server className="h-5 w-5 text-muted-foreground" />
+            )}
+            <div>
+              <span className={`font-medium ${
+                connectionResult.status === "success" 
+                  ? "text-green-700" 
+                  : connectionResult.status === "error" 
+                    ? "text-red-700" 
+                    : "text-foreground"
+              }`}>
+                {connectionResult.status === "success" 
+                  ? "Conectado" 
+                  : connectionResult.status === "error" 
+                    ? "Erro" 
+                    : "Aguardando teste"}
+              </span>
+              {connectionResult.message && (
+                <span className="text-sm text-muted-foreground ml-2">
+                  — {connectionResult.message}
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {connectionResult.timestamp && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {formatTime(connectionResult.timestamp)}
+              </span>
+            )}
+            <Badge variant="outline" className="text-xs">
+              <RefreshCw className="h-3 w-3 mr-1" />
+              {timeUntilRefresh}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestConnection}
+              disabled={isTesting}
+              className="h-7 px-2"
+            >
+              {isTesting ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+            </Button>
+          </div>
         </div>
 
-        <div className="max-w-2xl space-y-6">
-          {/* Connection Status Card */}
-          <Card className={connectionResult.status === "error" ? "border-destructive/50" : connectionResult.status === "success" ? "border-green-500/50" : ""}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${
-                    connectionResult.status === "success" 
-                      ? "bg-green-500/10" 
-                      : connectionResult.status === "error" 
-                        ? "bg-destructive/10" 
-                        : "bg-primary/10"
-                  }`}>
-                    {connectionResult.status === "success" ? (
-                      <CheckCircle2 className="h-5 w-5 text-green-500" />
-                    ) : connectionResult.status === "error" ? (
-                      <XCircle className="h-5 w-5 text-destructive" />
-                    ) : (
-                      <Server className="h-5 w-5 text-primary" />
-                    )}
-                  </div>
-                  <div>
-                    <CardTitle>Status da Conexão</CardTitle>
-                    <CardDescription>
-                      Atualização automática a cada 5 minutos
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {connectionResult.status === "success" ? (
-                    <Badge className="bg-green-500 hover:bg-green-600">
-                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                      Conectado
-                    </Badge>
-                  ) : connectionResult.status === "error" ? (
-                    <Badge variant="destructive">
-                      <XCircle className="h-3 w-3 mr-1" />
-                      Erro
-                    </Badge>
-                  ) : (
-                    <Badge variant="secondary">Não testado</Badge>
-                  )}
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Auto-refresh info */}
-              <div className="flex items-center justify-between text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  <span>Próxima atualização automática em: <strong>{timeUntilRefresh}</strong></span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTestConnection}
-                  disabled={isTesting}
-                  className="h-7"
-                >
-                  {isTesting ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  ) : (
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                  )}
-                  Forçar Atualização
-                </Button>
-              </div>
-
-              {/* Last check info */}
-              {connectionResult.timestamp && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Clock className="h-4 w-4" />
-                  <span>Última verificação: {formatDateTime(connectionResult.timestamp)}</span>
-                </div>
-              )}
-
-              {/* Success details */}
-              {connectionResult.status === "success" && (
-                <Alert className="border-green-500/50 bg-green-50">
-                  <CheckCircle2 className="h-4 w-4 text-green-500" />
-                  <AlertTitle className="text-green-700">Conexão Ativa</AlertTitle>
-                  <AlertDescription className="text-green-600">
-                    {connectionResult.message}
-                    {connectionResult.ticketsCount !== undefined && (
-                      <span className="block mt-1">
-                        <strong>{connectionResult.ticketsCount}</strong> tickets encontrados no GLPI
-                      </span>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
-
-              {/* Error details */}
-              {connectionResult.status === "error" && (
-                <Alert variant="destructive">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Falha na Conexão</AlertTitle>
-                  <AlertDescription className="space-y-2">
-                    <p><strong>Erro:</strong> {connectionResult.message}</p>
-                    {connectionResult.details && (
-                      <div className="mt-2 p-3 bg-destructive/10 rounded-md text-sm">
-                        <p className="font-medium mb-1">Detalhes:</p>
-                        <p>{connectionResult.details}</p>
-                      </div>
-                    )}
-                  </AlertDescription>
-                </Alert>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Configuration Card */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Config Card */}
           <Card>
-            <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                  <Server className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                  <CardTitle>Configuração GLPI</CardTitle>
-                  <CardDescription>
-                    Credenciais para acessar a API do GLPI
-                  </CardDescription>
-                </div>
-              </div>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Credenciais GLPI</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {/* URL */}
-              <div className="space-y-2">
-                <Label htmlFor="glpi-url">URL do GLPI</Label>
+            <CardContent className="space-y-3">
+              <div className="space-y-1">
+                <Label htmlFor="glpi-url" className="text-xs">URL do GLPI</Label>
                 <Input
                   id="glpi-url"
                   type="url"
                   placeholder="https://suporte.exemplo.com"
                   value={config.url}
                   onChange={(e) => setConfig({ ...config, url: e.target.value })}
+                  className="h-8 text-sm"
                 />
-                <p className="text-xs text-muted-foreground">
-                  URL base da sua instância GLPI (sem /apirest.php)
-                </p>
               </div>
 
-              {/* App Token */}
-              <div className="space-y-2">
-                <Label htmlFor="app-token">App Token</Label>
+              <div className="space-y-1">
+                <Label htmlFor="app-token" className="text-xs">App Token</Label>
                 <div className="relative">
                   <Input
                     id="app-token"
                     type={showTokens.appToken ? "text" : "password"}
-                    placeholder="••••••••••••••••••••"
+                    placeholder="••••••••••••"
                     value={config.appToken}
                     onChange={(e) => setConfig({ ...config, appToken: e.target.value })}
+                    className="h-8 text-sm pr-8"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() =>
-                      setShowTokens({ ...showTokens, appToken: !showTokens.appToken })
-                    }
+                    className="absolute right-0 top-0 h-full px-2 hover:bg-transparent"
+                    onClick={() => setShowTokens({ ...showTokens, appToken: !showTokens.appToken })}
                   >
-                    {showTokens.appToken ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    {showTokens.appToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Token da aplicação: GLPI → Configurar → Geral → API → Clientes de API
-                </p>
               </div>
 
-              {/* User Token */}
-              <div className="space-y-2">
-                <Label htmlFor="user-token">User Token</Label>
+              <div className="space-y-1">
+                <Label htmlFor="user-token" className="text-xs">User Token</Label>
                 <div className="relative">
                   <Input
                     id="user-token"
                     type={showTokens.userToken ? "text" : "password"}
-                    placeholder="••••••••••••••••••••"
+                    placeholder="••••••••••••"
                     value={config.userToken}
                     onChange={(e) => setConfig({ ...config, userToken: e.target.value })}
+                    className="h-8 text-sm pr-8"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                    onClick={() =>
-                      setShowTokens({ ...showTokens, userToken: !showTokens.userToken })
-                    }
+                    className="absolute right-0 top-0 h-full px-2 hover:bg-transparent"
+                    onClick={() => setShowTokens({ ...showTokens, userToken: !showTokens.userToken })}
                   >
-                    {showTokens.userToken ? (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    ) : (
-                      <Eye className="h-4 w-4 text-muted-foreground" />
-                    )}
+                    {showTokens.userToken ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
                   </Button>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Token do usuário: GLPI → Preferências → Acesso Remoto → Token de API
-                </p>
               </div>
 
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t">
-                <Button onClick={handleTestConnection} variant="outline" disabled={isTesting}>
-                  {isTesting ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <TestTube2 className="h-4 w-4 mr-2" />
+              <Button onClick={handleSave} size="sm" className="w-full mt-2">
+                <Save className="h-3 w-3 mr-2" />
+                Salvar Configurações
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Response Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Resposta da API</CardTitle>
+                {connectionResult.apiResponse && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2"
+                    onClick={() => copyToClipboard(connectionResult.apiResponse || "")}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {connectionResult.apiResponse ? (
+                <div className="space-y-3">
+                  {errorSolution && (
+                    <div className="bg-amber-50 border border-amber-200 rounded p-2 text-xs">
+                      <p className="font-medium text-amber-800">{errorSolution.title}</p>
+                      <p className="text-amber-700 mt-1">→ {errorSolution.solution}</p>
+                    </div>
                   )}
-                  Testar Conexão
-                </Button>
-                <Button onClick={handleSave}>
-                  <Save className="h-4 w-4 mr-2" />
-                  Salvar
-                </Button>
-              </div>
-
-              <div className="pt-4 border-t">
-                <Alert>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Importante</AlertTitle>
-                  <AlertDescription>
-                    Os tokens de produção estão configurados nos secrets do sistema. 
-                    Para alterar as credenciais de produção, entre em contato com o administrador 
-                    ou atualize os secrets: GLPI_API_URL, GLPI_APP_TOKEN e GLPI_USER_TOKEN.
-                  </AlertDescription>
-                </Alert>
-              </div>
+                  <Collapsible open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+                    <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+                      <ChevronDown className={`h-3 w-3 transition-transform ${isDetailsOpen ? "" : "-rotate-90"}`} />
+                      JSON completo
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-48 font-mono">
+                        {connectionResult.apiResponse}
+                      </pre>
+                    </CollapsibleContent>
+                  </Collapsible>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground text-center py-8">
+                  Clique em atualizar para testar a conexão
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
+
+        {/* Help */}
+        <Card className="mt-4">
+          <CardContent className="py-3">
+            <p className="text-xs text-muted-foreground">
+              <strong>Dica:</strong> Os tokens são configurados nos secrets do backend. 
+              Para alterar, acesse as configurações do projeto e atualize os valores de 
+              <code className="mx-1 px-1 bg-muted rounded">GLPI_API_URL</code>, 
+              <code className="mx-1 px-1 bg-muted rounded">GLPI_APP_TOKEN</code> e 
+              <code className="mx-1 px-1 bg-muted rounded">GLPI_USER_TOKEN</code>.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
