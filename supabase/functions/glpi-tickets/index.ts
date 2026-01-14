@@ -247,6 +247,36 @@ serve(async (req) => {
       return { sector, product };
     };
 
+    // Função para extrair conteúdo limpo da descrição
+    const extractCleanDescription = (content: string): string => {
+      if (!content) return '';
+      
+      // Procurar por "Descrição :" ou "Descrição:" e pegar o conteúdo após
+      const descriptionMatch = content.match(/Descri[çc][ãa]o\s*:\s*<\/b>\s*([\s\S]*)/i);
+      let cleanContent = descriptionMatch ? descriptionMatch[1] : content;
+      
+      // Remover tags HTML
+      cleanContent = cleanContent.replace(/<[^>]*>/g, '');
+      
+      // Decodificar entidades HTML comuns
+      cleanContent = cleanContent
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&apos;/g, "'");
+      
+      // Limpar espaços múltiplos e quebras de linha excessivas
+      cleanContent = cleanContent
+        .replace(/\s+/g, ' ')
+        .replace(/\n\s*\n/g, '\n')
+        .trim();
+      
+      return cleanContent;
+    };
+
     // Transformar tickets para o formato do backlog
     const backlogTasks = allTicketsWithHistory.map((ticket) => {
       const openedAt = new Date(ticket.date);
@@ -265,7 +295,7 @@ serve(async (req) => {
         date: new Date(followup.date).toLocaleString('pt-BR'),
         user: typeof followup.users_id === 'string' ? followup.users_id : 'Sistema',
         action: 'Acompanhamento',
-        content: followup.content?.replace(/<[^>]*>/g, '').substring(0, 500) || '',
+        content: extractCleanDescription(followup.content || '').substring(0, 500),
       }));
 
       // Extrair setor e produto
@@ -292,7 +322,7 @@ serve(async (req) => {
         daysSinceLastAction,
         slaDeadline: null,
         isSlaBreach: daysSinceLastAction > 5,
-        content: ticket.content,
+        content: extractCleanDescription(ticket.content || ''),
         history,
       };
     });

@@ -21,7 +21,9 @@ import {
   LogOut, 
   User,
   RefreshCw,
-  Loader2
+  Loader2,
+  LayoutGrid,
+  CalendarDays
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -45,7 +47,9 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
   }, [user, loading, navigate]);
 
   const navItems = [
-    { label: "Produtos", href: "/produtos", icon: Package },
+    { label: "Tarefas", href: "/produtos", icon: Package },
+    { label: "Kanban", href: "/kanban", icon: LayoutGrid },
+    { label: "Roadmap", href: "/roadmap", icon: CalendarDays },
     { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },
   ];
 
