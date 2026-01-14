@@ -247,32 +247,75 @@ serve(async (req) => {
       return { sector, product };
     };
 
+    // Função para decodificar entidades HTML numéricas e nomeadas
+    const decodeHtmlEntities = (text: string): string => {
+      if (!text) return '';
+      
+      // Decodificar entidades numéricas (&#60; -> <, &#62; -> >, etc.)
+      let decoded = text.replace(/&#(\d+);/g, (match, dec) => {
+        return String.fromCharCode(parseInt(dec, 10));
+      });
+      
+      // Decodificar entidades hexadecimais (&#x3C; -> <, etc.)
+      decoded = decoded.replace(/&#x([0-9A-Fa-f]+);/g, (match, hex) => {
+        return String.fromCharCode(parseInt(hex, 16));
+      });
+      
+      // Decodificar entidades nomeadas comuns
+      const namedEntities: Record<string, string> = {
+        '&nbsp;': ' ',
+        '&amp;': '&',
+        '&lt;': '<',
+        '&gt;': '>',
+        '&quot;': '"',
+        '&#39;': "'",
+        '&apos;': "'",
+        '&copy;': String.fromCharCode(169),
+        '&reg;': String.fromCharCode(174),
+        '&trade;': String.fromCharCode(8482),
+        '&mdash;': String.fromCharCode(8212),
+        '&ndash;': String.fromCharCode(8211),
+        '&lsquo;': String.fromCharCode(8216),
+        '&rsquo;': String.fromCharCode(8217),
+        '&ldquo;': String.fromCharCode(8220),
+        '&rdquo;': String.fromCharCode(8221),
+        '&hellip;': String.fromCharCode(8230),
+      };
+      
+      for (const [entity, char] of Object.entries(namedEntities)) {
+        decoded = decoded.replace(new RegExp(entity, 'g'), char);
+      }
+      
+      return decoded;
+    };
+
     // Função para extrair conteúdo limpo da descrição
     const extractCleanDescription = (content: string): string => {
       if (!content) return '';
       
-      // Procurar por "Descrição :" ou "Descrição:" e pegar o conteúdo após
-      const descriptionMatch = content.match(/Descri[çc][ãa]o\s*:\s*<\/b>\s*([\s\S]*)/i);
-      let cleanContent = descriptionMatch ? descriptionMatch[1] : content;
+      // Primeiro decodificar todas as entidades HTML
+      let cleanContent = decodeHtmlEntities(content);
+      
+      // Procurar por "Descrição :" ou "7) Descrição :" e pegar o conteúdo após
+      const descriptionMatch = cleanContent.match(/(?:\d+\)\s*)?Descri[çc][ãa]o\s*:\s*(?:<\/b>)?\s*([\s\S]*)/i);
+      if (descriptionMatch) {
+        cleanContent = descriptionMatch[1];
+      }
       
       // Remover tags HTML
       cleanContent = cleanContent.replace(/<[^>]*>/g, '');
-      
-      // Decodificar entidades HTML comuns
-      cleanContent = cleanContent
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&apos;/g, "'");
       
       // Limpar espaços múltiplos e quebras de linha excessivas
       cleanContent = cleanContent
         .replace(/\s+/g, ' ')
         .replace(/\n\s*\n/g, '\n')
         .trim();
+      
+      // Remover qualquer texto após "Anexo :" pois é metadado
+      const anexoIndex = cleanContent.indexOf('Anexo :');
+      if (anexoIndex > 0) {
+        cleanContent = cleanContent.substring(0, anexoIndex).trim();
+      }
       
       return cleanContent;
     };
