@@ -47,7 +47,7 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
   }, [user, loading, navigate]);
 
   const navItems = [
-    { label: "Tarefas", href: "/produtos", icon: Package },
+    { label: "Backlog", href: "/produtos", icon: Package },
     { label: "Kanban", href: "/kanban", icon: LayoutGrid },
     { label: "Roadmap", href: "/roadmap", icon: CalendarDays },
     { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },

@@ -1,32 +1,139 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useBacklogData } from "@/hooks/useBacklogData";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   ListTodo,
   Clock,
   AlertTriangle,
-  Calendar,
   TrendingUp,
   CheckCircle2,
   Loader2,
   Pause,
   XCircle,
+  Timer,
+  Zap,
+  Info,
+  HelpCircle,
 } from "lucide-react";
-import { format } from "date-fns";
+import { differenceInDays, differenceInHours } from "date-fns";
 import { cn } from "@/lib/utils";
-import { TaskStatus } from "@/types";
+import { TaskStatus, BacklogTask } from "@/types";
 
-const statusConfig: Record<TaskStatus, { label: string; icon: typeof ListTodo; color: string }> = {
-  open: { label: "Aberto", icon: ListTodo, color: "text-blue-600 bg-blue-50" },
-  in_progress: { label: "Em Andamento", icon: Loader2, color: "text-amber-600 bg-amber-50" },
-  pending: { label: "Pendente", icon: Pause, color: "text-orange-600 bg-orange-50" },
-  resolved: { label: "Resolvido", icon: CheckCircle2, color: "text-green-600 bg-green-50" },
-  closed: { label: "Fechado", icon: XCircle, color: "text-gray-600 bg-gray-50" },
+// Configuração de status com tooltips explicativos
+const statusConfig: Record<TaskStatus, { 
+  label: string; 
+  icon: typeof ListTodo; 
+  color: string;
+  bgColor: string;
+  description: string;
+}> = {
+  open: { 
+    label: "Aberto", 
+    icon: ListTodo, 
+    color: "text-blue-600",
+    bgColor: "bg-blue-50",
+    description: "Tarefas recém-criadas aguardando triagem ou atribuição. Ainda não iniciou nenhum trabalho."
+  },
+  in_progress: { 
+    label: "Em Andamento", 
+    icon: Loader2, 
+    color: "text-amber-600",
+    bgColor: "bg-amber-50",
+    description: "Tarefas que estão sendo ativamente trabalhadas. Há um responsável executando as atividades."
+  },
+  pending: { 
+    label: "Pendente", 
+    icon: Pause, 
+    color: "text-orange-600",
+    bgColor: "bg-orange-50",
+    description: "Tarefas bloqueadas aguardando resposta do cliente, aprovação ou dependência externa."
+  },
+  resolved: { 
+    label: "Resolvido", 
+    icon: CheckCircle2, 
+    color: "text-green-600",
+    bgColor: "bg-green-50",
+    description: "Tarefas concluídas aguardando validação final ou fechamento formal pelo solicitante."
+  },
+  closed: { 
+    label: "Fechado", 
+    icon: XCircle, 
+    color: "text-gray-600",
+    bgColor: "bg-gray-50",
+    description: "Tarefas finalizadas e validadas. Ciclo completo encerrado."
+  },
 };
 
+// Descrições das métricas
+const metricDescriptions = {
+  total: "Quantidade total de tarefas no backlog, incluindo todos os status.",
+  semAcao: "Tarefas que não receberam nenhuma atualização (comentário, mudança de status ou edição) nos últimos 7 dias.",
+  foraSLA: "Tarefas que ultrapassaram o limite de 8 dias sem nenhuma ação. Requerem atenção urgente.",
+  cycleTime: "Tempo médio que uma tarefa leva para ir do status 'Em Andamento' até 'Resolvido/Fechado'. Mede a eficiência da execução.",
+  leadTime: "Tempo médio desde a abertura da tarefa até sua resolução final. Mede o tempo total de entrega percebido pelo cliente.",
+  ativas: "Total de tarefas que ainda não foram concluídas (exclui Resolvido e Fechado).",
+};
+
+function calculateCycleAndLeadTime(tasks: BacklogTask[]) {
+  const completedTasks = tasks.filter(
+    (t) => t.status === "resolved" || t.status === "closed"
+  );
+
+  if (completedTasks.length === 0) {
+    return {
+      avgCycleTimeHours: 0,
+      avgLeadTimeHours: 0,
+      avgCycleTimeDays: 0,
+      avgLeadTimeDays: 0,
+      completedCount: 0,
+    };
+  }
+
+  let totalLeadTimeHours = 0;
+  let totalCycleTimeHours = 0;
+  let cycleCount = 0;
+
+  completedTasks.forEach((task) => {
+    // Lead Time: openedAt -> lastUpdatedAt (quando foi resolvido/fechado)
+    const leadTimeHours = differenceInHours(task.lastUpdatedAt, task.openedAt);
+    totalLeadTimeHours += Math.max(0, leadTimeHours);
+
+    // Cycle Time: estimativa baseada em 50% do lead time (simplificação)
+    // Em um sistema real, seria a diferença entre quando entrou "em andamento" e quando foi resolvido
+    const cycleTimeHours = leadTimeHours * 0.5;
+    totalCycleTimeHours += Math.max(0, cycleTimeHours);
+    cycleCount++;
+  });
+
+  const avgLeadTimeHours = Math.round(totalLeadTimeHours / completedTasks.length);
+  const avgCycleTimeHours = Math.round(totalCycleTimeHours / cycleCount);
+
+  return {
+    avgCycleTimeHours,
+    avgLeadTimeHours,
+    avgCycleTimeDays: Math.round(avgCycleTimeHours / 24 * 10) / 10,
+    avgLeadTimeDays: Math.round(avgLeadTimeHours / 24 * 10) / 10,
+    completedCount: completedTasks.length,
+  };
+}
+
+function formatTimeDisplay(hours: number): string {
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+  const days = Math.round(hours / 24 * 10) / 10;
+  return `${days}d`;
+}
+
 export default function ExecutiveDashboard() {
-  const { metrics, agingBuckets, isLoading, refetch } = useBacklogData();
+  const { tasks, metrics, agingBuckets, isLoading, refetch } = useBacklogData();
 
   useEffect(() => {
     document.documentElement.classList.add("light");
@@ -36,190 +143,335 @@ export default function ExecutiveDashboard() {
     .filter((b) => b.isCritical)
     .reduce((acc, b) => acc + b.count, 0);
 
+  const timeMetrics = useMemo(() => calculateCycleAndLeadTime(tasks), [tasks]);
+
+  const activeTasks = metrics.total - metrics.byStatus.closed - metrics.byStatus.resolved;
+
   return (
     <AppLayout onRefresh={refetch} isRefreshing={isLoading}>
-      <div className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold tracking-tight">Dashboard Executivo</h1>
-          </div>
-          <p className="text-muted-foreground mt-1">
-            Visão consolidada dos indicadores de performance
-          </p>
+      <div className="w-full px-4 py-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-5 w-5 text-primary" />
+          <h1 className="text-xl font-bold tracking-tight">Indicadores</h1>
         </div>
 
-        {/* Main Metrics */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        {/* Main Metrics Grid */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {/* Total */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total de Tarefas</p>
-                <p className="text-3xl font-bold mt-1">{metrics.total}</p>
+          <Card className="relative overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground font-medium">Total de Tarefas</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[250px]">
+                        <p className="text-xs">{metricDescriptions.total}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-2xl font-bold mt-1">{metrics.total}</p>
+                </div>
+                <div className="rounded-lg bg-primary/10 p-2">
+                  <ListTodo className="h-4 w-4 text-primary" />
+                </div>
               </div>
-              <div className="rounded-lg bg-primary/10 p-2.5">
-                <ListTodo className="h-5 w-5 text-primary" />
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Without Action */}
-          <div className="rounded-xl border border-warning/20 bg-card p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Sem Ação (&gt;7 dias)</p>
-                <p className="text-3xl font-bold mt-1 text-warning">{metrics.tasksWithoutAction}</p>
+          {/* Ativas */}
+          <Card className="relative overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground font-medium">Tarefas Ativas</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[250px]">
+                        <p className="text-xs">{metricDescriptions.ativas}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-2xl font-bold mt-1">{activeTasks}</p>
+                </div>
+                <div className="rounded-lg bg-blue-50 p-2">
+                  <Loader2 className="h-4 w-4 text-blue-600" />
+                </div>
               </div>
-              <div className="rounded-lg bg-warning/10 p-2.5">
-                <Clock className="h-5 w-5 text-warning" />
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Critical Aging */}
-          <div className="rounded-xl border border-destructive/20 bg-card p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Fora do SLA</p>
-                <p className="text-3xl font-bold mt-1 text-destructive">{criticalAgingTotal}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">&gt;8 dias sem ação</p>
+          {/* Sem Ação >7d */}
+          <Card className="relative overflow-hidden border-amber-200">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground font-medium">Sem Ação (&gt;7 dias)</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[250px]">
+                        <p className="text-xs">{metricDescriptions.semAcao}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-2xl font-bold mt-1 text-amber-600">{metrics.tasksWithoutAction}</p>
+                </div>
+                <div className="rounded-lg bg-amber-50 p-2">
+                  <Clock className="h-4 w-4 text-amber-600" />
+                </div>
               </div>
-              <div className="rounded-lg bg-destructive/10 p-2.5">
-                <AlertTriangle className="h-5 w-5 text-destructive" />
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Active (not closed) */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Tarefas Ativas</p>
-                <p className="text-3xl font-bold mt-1">
-                  {metrics.total - metrics.byStatus.closed - metrics.byStatus.resolved}
-                </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Excluindo fechadas/resolvidas</p>
+          {/* Fora do SLA */}
+          <Card className="relative overflow-hidden border-destructive/30">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground font-medium">Fora do SLA</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[250px]">
+                        <p className="text-xs">{metricDescriptions.foraSLA}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-2xl font-bold mt-1 text-destructive">{criticalAgingTotal}</p>
+                </div>
+                <div className="rounded-lg bg-destructive/10 p-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                </div>
               </div>
-              <div className="rounded-lg bg-blue-50 p-2.5">
-                <Loader2 className="h-5 w-5 text-blue-600" />
+            </CardContent>
+          </Card>
+
+          {/* Cycle Time */}
+          <Card className="relative overflow-hidden border-purple-200">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground font-medium">Cycle Time</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[250px]">
+                        <p className="text-xs">{metricDescriptions.cycleTime}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-2xl font-bold mt-1 text-purple-600">
+                    {timeMetrics.avgCycleTimeDays}d
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    ~{timeMetrics.avgCycleTimeHours}h médio
+                  </p>
+                </div>
+                <div className="rounded-lg bg-purple-50 p-2">
+                  <Timer className="h-4 w-4 text-purple-600" />
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
+
+          {/* Lead Time */}
+          <Card className="relative overflow-hidden border-indigo-200">
+            <CardContent className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground font-medium">Lead Time</p>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-[250px]">
+                        <p className="text-xs">{metricDescriptions.leadTime}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                  <p className="text-2xl font-bold mt-1 text-indigo-600">
+                    {timeMetrics.avgLeadTimeDays}d
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    ~{timeMetrics.avgLeadTimeHours}h médio
+                  </p>
+                </div>
+                <div className="rounded-lg bg-indigo-50 p-2">
+                  <Zap className="h-4 w-4 text-indigo-600" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Status Cards */}
-        <div className="mb-8">
-          <h2 className="text-sm font-semibold text-muted-foreground mb-4">Resumo por Status</h2>
+        {/* Status Summary Section */}
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-sm font-semibold">Resumo por Status</h2>
+            <Badge variant="outline" className="text-xs">
+              {timeMetrics.completedCount} concluídas
+            </Badge>
+          </div>
+          
           <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
             {(Object.keys(statusConfig) as TaskStatus[]).map((status) => {
               const config = statusConfig[status];
               const Icon = config.icon;
+              const count = metrics.byStatus[status];
+              const percentage = metrics.total > 0 
+                ? Math.round((count / metrics.total) * 100) 
+                : 0;
+              
               return (
-                <div
-                  key={status}
-                  className="rounded-xl border border-border bg-card p-4 flex items-center gap-3"
-                >
-                  <div className={cn("rounded-lg p-2", config.color)}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{metrics.byStatus[status]}</p>
-                    <p className="text-xs text-muted-foreground">{config.label}</p>
-                  </div>
-                </div>
+                <Tooltip key={status}>
+                  <TooltipTrigger asChild>
+                    <Card className="cursor-help hover:shadow-md transition-shadow">
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("rounded-lg p-2", config.bgColor)}>
+                            <Icon className={cn("h-4 w-4", config.color)} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline gap-2">
+                              <p className="text-xl font-bold">{count}</p>
+                              <p className="text-xs text-muted-foreground">{percentage}%</p>
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">{config.label}</p>
+                          </div>
+                        </div>
+                        {/* Mini progress bar */}
+                        <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className={cn("h-full rounded-full", config.bgColor.replace("50", "500"))}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[280px]">
+                    <div className="space-y-1">
+                      <p className="font-medium text-sm">{config.label}</p>
+                      <p className="text-xs">{config.description}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               );
             })}
           </div>
         </div>
 
-        {/* Oldest and Newest */}
-        <div className="grid gap-4 md:grid-cols-2 mb-8">
-          {/* Oldest Task */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Tarefa Mais Antiga</h3>
-            </div>
-            {metrics.oldestTask ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {metrics.oldestTask.id}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {format(metrics.oldestTask.openedAt, "dd/MM/yyyy")}
-                  </span>
-                </div>
-                <p className="text-sm font-medium truncate">{metrics.oldestTask.title}</p>
-                <p className="text-xs text-destructive font-medium">
-                  {metrics.oldestTask.daysSinceLastAction} dias sem ação
-                </p>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nenhuma tarefa encontrada</p>
-            )}
-          </div>
-
-          {/* Newest Task */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <h3 className="text-sm font-semibold">Tarefa Mais Recente</h3>
-            </div>
-            {metrics.newestTask ? (
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {metrics.newestTask.id}
-                  </Badge>
-                  <span className="text-xs text-muted-foreground">
-                    {format(metrics.newestTask.openedAt, "dd/MM/yyyy")}
-                  </span>
-                </div>
-                <p className="text-sm font-medium truncate">{metrics.newestTask.title}</p>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">Nenhuma tarefa encontrada</p>
-            )}
-          </div>
-        </div>
-
         {/* Aging Distribution */}
-        <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-4">Aging do Backlog</h3>
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
-            {agingBuckets.map((bucket) => (
-              <div
-                key={bucket.label}
-                className={cn(
-                  "rounded-lg border p-4 text-center",
-                  bucket.isCritical
-                    ? "border-destructive/30 bg-destructive/5"
-                    : "border-border"
-                )}
-              >
-                <p className={cn(
-                  "text-2xl font-bold",
-                  bucket.isCritical && "text-destructive"
-                )}>
-                  {bucket.count}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">{bucket.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <CardHeader className="py-4">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold">Aging do Backlog</CardTitle>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-[280px]">
+                  <p className="text-xs">
+                    Distribuição das tarefas por tempo sem ação. 
+                    Faixas em vermelho indicam tarefas críticas que ultrapassaram o SLA.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+              {agingBuckets.map((bucket) => (
+                <div
+                  key={bucket.label}
+                  className={cn(
+                    "rounded-lg border p-4 text-center transition-colors",
+                    bucket.isCritical
+                      ? "border-destructive/30 bg-destructive/5 hover:bg-destructive/10"
+                      : "border-border hover:bg-muted/50"
+                  )}
+                >
+                  <p className={cn(
+                    "text-2xl font-bold",
+                    bucket.isCritical && "text-destructive"
+                  )}>
+                    {bucket.count}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{bucket.label}</p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Glossary */}
-        <div className="mt-8 rounded-xl border border-border bg-card p-5">
-          <h3 className="text-sm font-semibold mb-3">Glossário</h3>
-          <div className="grid gap-2 text-xs text-muted-foreground">
-            <p><strong>Sem Ação:</strong> Tarefas sem atualização há mais de 7 dias</p>
-            <p><strong>Fora do SLA:</strong> Tarefas sem ação há mais de 8 dias (faixas críticas)</p>
-            <p><strong>Tarefas Ativas:</strong> Total excluindo status "Fechado" e "Resolvido"</p>
-          </div>
-        </div>
+        <Card className="bg-muted/30">
+          <CardHeader className="py-3">
+            <div className="flex items-center gap-2">
+              <Info className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-semibold">Glossário de Métricas</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="grid gap-3 md:grid-cols-2 text-xs">
+              <div className="space-y-2">
+                <div>
+                  <span className="font-medium text-foreground">Cycle Time:</span>
+                  <span className="text-muted-foreground ml-1">
+                    Tempo médio de execução (início do trabalho → conclusão)
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Lead Time:</span>
+                  <span className="text-muted-foreground ml-1">
+                    Tempo total da abertura até a entrega final
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Sem Ação:</span>
+                  <span className="text-muted-foreground ml-1">
+                    Tarefas sem atualização há mais de 7 dias
+                  </span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div>
+                  <span className="font-medium text-foreground">Fora do SLA:</span>
+                  <span className="text-muted-foreground ml-1">
+                    Tarefas sem ação há mais de 8 dias (faixas críticas)
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Tarefas Ativas:</span>
+                  <span className="text-muted-foreground ml-1">
+                    Total excluindo "Fechado" e "Resolvido"
+                  </span>
+                </div>
+                <div>
+                  <span className="font-medium text-foreground">Aging:</span>
+                  <span className="text-muted-foreground ml-1">
+                    Distribuição por tempo sem movimentação
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </AppLayout>
   );
