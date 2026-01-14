@@ -1,21 +1,18 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { AppLayout } from "@/components/layout/AppLayout";
 import { useSyncData } from "@/hooks/useSyncData";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  ArrowRightLeft, 
   ClipboardList, 
   BarChart3, 
   Settings, 
-  RefreshCw, 
   CheckCircle2, 
   XCircle,
-  Clock,
-  Loader2
+  Clock
 } from "lucide-react";
 
 interface SyncHistoryItem {
@@ -33,7 +30,6 @@ const Index = () => {
   const [lastCheck, setLastCheck] = useState<Date | null>(null);
   const [syncHistory, setSyncHistory] = useState<SyncHistoryItem[]>([]);
 
-  // Enable light mode by default
   useEffect(() => {
     document.documentElement.classList.add("light");
   }, []);
@@ -106,33 +102,13 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-              <ArrowRightLeft className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold tracking-tight">
-                <span className="text-primary">Sync</span>
-                <span className="text-foreground">Hub</span>
-              </h1>
-              <p className="text-[10px] text-muted-foreground -mt-0.5">
-                GLPI ↔ ClickUp Integration
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-8">
+    <AppLayout onRefresh={testGlpiConnection} isRefreshing={isLoading} lastUpdated={lastCheck}>
+      <div className="container mx-auto px-4 py-8">
         {/* Page Title */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold tracking-tight">Painel Principal</h2>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie a sincronização entre ClickUp e GLPI
+            Visão geral do sistema de gestão de tickets GLPI
           </p>
         </div>
 
@@ -166,41 +142,29 @@ const Index = () => {
             </Card>
           </Link>
           
-          <Card className="hover:shadow-lg transition-shadow cursor-pointer group opacity-60">
-            <CardHeader className="flex flex-row items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
-                <Settings className="h-6 w-6 text-orange-500" />
-              </div>
-              <div>
-                <CardTitle className="text-lg">Configurações</CardTitle>
-                <p className="text-sm text-muted-foreground">Em breve</p>
-              </div>
-            </CardHeader>
-          </Card>
+          <Link to="/configuracoes">
+            <Card className="hover:shadow-lg transition-shadow cursor-pointer group">
+              <CardHeader className="flex flex-row items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-orange-500/10 group-hover:bg-orange-500/20 transition-colors">
+                  <Settings className="h-6 w-6 text-orange-500" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Configurações</CardTitle>
+                  <p className="text-sm text-muted-foreground">Tokens e acessos GLPI</p>
+                </div>
+              </CardHeader>
+            </Card>
+          </Link>
         </div>
 
         {/* GLPI Sync Status */}
         <div className="grid gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <ArrowRightLeft className="h-5 w-5" />
-                  Status de Sincronização GLPI
-                </CardTitle>
-                <Button 
-                  onClick={testGlpiConnection} 
-                  disabled={isLoading}
-                  size="sm"
-                >
-                  {isLoading ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  ) : (
-                    <RefreshCw className="h-4 w-4 mr-2" />
-                  )}
-                  Atualizar
-                </Button>
-              </div>
+              <CardTitle className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5" />
+                Status de Conexão GLPI
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex items-center gap-4 mb-4">
@@ -228,7 +192,7 @@ const Index = () => {
               </div>
               
               <p className="text-sm text-muted-foreground">
-                Clique em "Atualizar" para testar a conexão com o GLPI e sincronizar os tickets.
+                Clique em "Atualizar" no topo da página para testar a conexão com o GLPI.
               </p>
             </CardContent>
           </Card>
@@ -278,16 +242,8 @@ const Index = () => {
             </CardContent>
           </Card>
         </div>
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border/50 mt-12 py-6">
-        <div className="container mx-auto px-4 flex items-center justify-between text-sm text-muted-foreground">
-          <p>SyncHub v1.0.0 • Integração GLPI ↔ ClickUp</p>
-          <p>Última atualização: {lastCheck ? formatTime(lastCheck) : 'N/A'}</p>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </AppLayout>
   );
 };
 
