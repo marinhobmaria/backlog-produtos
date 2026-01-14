@@ -89,11 +89,13 @@ export default function Backlog() {
           taskContents={taskContents}
         />
 
-        {/* Indicadores - abaixo da tabela */}
+        {/* Indicadores */}
         <OperationalAlerts
           alerts={alerts}
           alertsOnly={filters.alertsOnly}
           onToggleAlertsOnly={toggleAlertsOnly}
+          totalTasks={totalTasks}
+          openTasks={tasks.filter(t => t.status !== 'closed' && t.status !== 'resolved').length}
         />
 
         {/* Charts Row - Dashboards after indicadores */}
