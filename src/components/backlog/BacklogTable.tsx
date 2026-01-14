@@ -129,11 +129,7 @@ export function BacklogTable({
   };
 
   const getTaskContent = (taskId: string) => {
-    const content = taskContents[taskId]?.content;
-    if (!content) return "";
-    // Strip HTML tags and decode entities
-    const stripped = content.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-    return stripped;
+    return taskContents[taskId]?.content;
   };
 
   const getTaskHistory = (taskId: string) => {
@@ -206,42 +202,49 @@ export function BacklogTable({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              <TableHead className="w-[70px]">
+              <TableHead className="w-[90px]">
                 <SortHeader column="id" label="ID" />
               </TableHead>
-              <TableHead className="w-[100px]">
+              <TableHead className="min-w-[180px]">
+                <SortHeader column="title" label="Descrição" />
+              </TableHead>
+              <TableHead className="w-[110px]">
                 <SortHeader column="status" label="Status" />
               </TableHead>
-              <TableHead className="w-[80px]">
-                <SortHeader column="priority" label="Prior." />
+              <TableHead className="w-[90px]">
+                <SortHeader column="priority" label="Prioridade" />
               </TableHead>
-              <TableHead className="min-w-[350px]">Descrição</TableHead>
-              <TableHead className="w-[100px]">
+              <TableHead className="w-[120px]">
                 <SortHeader column="client" label="Cliente" />
               </TableHead>
-              <TableHead className="w-[100px]">
-                <SortHeader column="assignee" label="Resp." />
+              <TableHead className="w-[110px]">
+                <SortHeader column="assignee" label="Responsável" />
               </TableHead>
-              <TableHead className="w-[70px]">
-                <SortHeader column="openedAt" label="Data" />
+              <TableHead className="w-[90px]">
+                <SortHeader column="sector" label="Setor" />
               </TableHead>
-              <TableHead className="w-[60px] text-right">
-                <SortHeader column="daysSinceLastAction" label="Dias" className="justify-end ml-auto -mr-3" />
+              <TableHead className="w-[90px]">
+                <SortHeader column="openedAt" label="Abertura" />
               </TableHead>
-              <TableHead className="w-[80px]">Tags</TableHead>
+              <TableHead className="w-[70px] text-right">
+                <SortHeader column="daysSinceLastAction" label="Parado" className="justify-end ml-auto -mr-3" />
+              </TableHead>
+              <TableHead className="w-[100px]">Tags</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tasks.map((task) => {
               const aging = getAgingDisplay(task.daysSinceLastAction);
-              const description = getTaskContent(task.id) || task.title;
               return (
                 <TableRow 
                   key={task.id} 
                   className={cn("cursor-pointer", getRowHighlight(task))}
                   onClick={() => handleRowClick(task)}
                 >
-                  <TableCell className="font-mono text-xs text-muted-foreground">{task.id}</TableCell>
+                  <TableCell className="font-mono text-xs">{task.id}</TableCell>
+                  <TableCell className="font-medium text-sm max-w-[200px] truncate" title={task.title}>
+                    {task.title}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       variant="outline"
@@ -258,37 +261,53 @@ export function BacklogTable({
                       {priorityLabels[task.priority]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="py-3">
-                    <p className="text-sm leading-relaxed line-clamp-2" title={description}>
-                      {description}
-                    </p>
-                  </TableCell>
-                  <TableCell className="text-sm truncate max-w-[100px]" title={task.client}>
+                  <TableCell className="text-sm truncate max-w-[120px]" title={task.client}>
                     {task.client}
                   </TableCell>
-                  <TableCell className="text-sm truncate max-w-[100px]" title={task.assignee}>
-                    {task.assignee || <span className="text-muted-foreground italic">—</span>}
+                  <TableCell className="text-sm truncate max-w-[110px]" title={task.assignee}>
+                    {task.assignee}
                   </TableCell>
-                  <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
-                    {format(task.openedAt, "dd/MM")}
+                  <TableCell className="text-sm text-muted-foreground">
+                    {task.sector}
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground whitespace-nowrap">
+                    {format(task.openedAt, "dd/MM/yy")}
                   </TableCell>
                   <TableCell className={cn("text-right text-sm", aging.class)}>
                     {aging.text}
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-0.5">
-                      {task.tags.slice(0, 3).map((tag) => {
-                        const Icon = tagIcons[tag];
-                        return (
-                          <span
-                            key={tag}
-                            title={tagLabels[tag]}
-                            className={cn("p-0.5", tagColors[tag])}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
+                    <div className="flex items-center gap-1">
+                      <div className="flex gap-0.5">
+                        {task.tags.slice(0, 2).map((tag) => {
+                          const Icon = tagIcons[tag];
+                          return (
+                            <span
+                              key={tag}
+                              title={tagLabels[tag]}
+                              className={cn("p-0.5", tagColors[tag])}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                            </span>
+                          );
+                        })}
+                        {task.tags.length > 2 && (
+                          <span className="text-xs text-muted-foreground">
+                            +{task.tags.length - 2}
                           </span>
-                        );
-                      })}
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 ml-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRowClick(task);
+                        }}
+                      >
+                        <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
                     </div>
                   </TableCell>
                 </TableRow>
@@ -296,7 +315,7 @@ export function BacklogTable({
             })}
             {tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                   Nenhuma tarefa encontrada
                 </TableCell>
               </TableRow>
