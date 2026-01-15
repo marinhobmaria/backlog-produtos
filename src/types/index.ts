@@ -111,6 +111,7 @@ export interface BacklogTask {
   squad: string;
   client: string;
   sector: string;
+  product: string;
   tags: TaskTag[];
   openedAt: Date;
   lastUpdatedAt: Date;
@@ -129,6 +130,7 @@ export interface BacklogFilters {
   type: TaskType[];
   client: string[];
   sector: string[];
+  product: string[];
   tags: TaskTag[];
   search: string;
   alertsOnly: boolean;

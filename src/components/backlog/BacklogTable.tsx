@@ -222,19 +222,24 @@ export function BacklogTable({
               <TableHead className="w-[80px] px-2">
                 <SortHeader column="id" label="ID" />
               </TableHead>
-              <TableHead className="min-w-[250px] px-2">
+              <TableHead className="min-w-[200px] px-2">
                 <SortHeader column="title" label="Descrição" />
               </TableHead>
-              <TableHead className="w-[100px] px-2">
+              <TableHead className="w-[90px] px-2">
                 <SortHeader column="status" label="Status" />
               </TableHead>
               <TableHead className="w-[80px] px-2">
-                <SortHeader column="priority" label="Prioridade" />
+                <SortHeader column="priority" label="Prior." />
               </TableHead>
-              <TableHead className="w-[100px] px-2">
+              <TableHead className="w-[90px] px-2">
                 <SortHeader column="sector" label="Setor" />
               </TableHead>
-              <TableHead className="w-[120px] px-2">Produto</TableHead>
+              <TableHead className="w-[100px] px-2">
+                <SortHeader column="product" label="Produto" />
+              </TableHead>
+              <TableHead className="w-[80px] px-2">
+                <SortHeader column="client" label="Cliente" />
+              </TableHead>
               <TableHead className="w-[100px] px-2">
                 <SortHeader column="assignee" label="Responsável" />
               </TableHead>
@@ -252,7 +257,6 @@ export function BacklogTable({
               const aging = getAgingDisplay(task.daysSinceLastAction);
               const isExpanded = expandedRows.has(task.id);
               const taskContent = getTaskContent(task.id);
-              const extendedTask = task as BacklogTask & { product?: string };
               
               return (
                 <Collapsible key={task.id} open={isExpanded} asChild>
@@ -301,11 +305,16 @@ export function BacklogTable({
                           {priorityLabels[task.priority]}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs px-2" onClick={() => handleRowClick(task)}>
-                        {task.sector}
+                      <TableCell className="text-xs px-2 truncate max-w-[90px]" title={task.sector} onClick={() => handleRowClick(task)}>
+                        {task.sector || '-'}
                       </TableCell>
-                      <TableCell className="text-xs px-2 text-muted-foreground" onClick={() => handleRowClick(task)}>
-                        {extendedTask.product || '-'}
+                      <TableCell className="text-xs px-2 truncate max-w-[100px]" title={task.product} onClick={() => handleRowClick(task)}>
+                        {task.product || '-'}
+                      </TableCell>
+                      <TableCell className="text-xs px-2 truncate max-w-[80px]" title={task.client} onClick={() => handleRowClick(task)}>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">
+                          {task.client || '-'}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-xs px-2 truncate max-w-[100px]" title={task.assignee} onClick={() => handleRowClick(task)}>
                         {task.assignee}
@@ -351,7 +360,7 @@ export function BacklogTable({
                     </TableRow>
                     <CollapsibleContent asChild>
                       <TableRow className="bg-muted/30 hover:bg-muted/40">
-                        <TableCell colSpan={11} className="p-0">
+                        <TableCell colSpan={12} className="p-0">
                           <div 
                             className="text-sm prose prose-sm max-w-none p-4 overflow-auto"
                             style={{ maxHeight: '60vh', minHeight: '100px' }}
@@ -366,7 +375,7 @@ export function BacklogTable({
             })}
             {tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={12} className="h-24 text-center text-muted-foreground">
                   Nenhuma tarefa encontrada
                 </TableCell>
               </TableRow>
