@@ -25,6 +25,7 @@ interface GLPITask {
   squad: string;
   client: string;
   sector: string;
+  product: string;
   tags: string[];
   openedAt: string;
   lastUpdatedAt: string;
@@ -44,6 +45,7 @@ const initialFilters: BacklogFilters = {
   type: [],
   client: [],
   sector: [],
+  product: [],
   tags: [],
   search: "",
   alertsOnly: false,
@@ -176,6 +178,7 @@ export function useBacklogData() {
         squad: ticket.squad,
         client: ticket.client,
         sector: ticket.sector,
+        product: ticket.product || '',
         tags: ticket.tags as TaskTag[],
         openedAt: new Date(ticket.openedAt),
         lastUpdatedAt: new Date(ticket.lastUpdatedAt),
@@ -243,6 +246,9 @@ export function useBacklogData() {
 
       // Sector filter
       if (filters.sector.length > 0 && !filters.sector.includes(task.sector)) return false;
+
+      // Product filter
+      if (filters.product.length > 0 && !filters.product.includes(task.product)) return false;
 
       // Tags filter
       if (filters.tags.length > 0 && !filters.tags.some((tag) => task.tags.includes(tag))) return false;
@@ -412,10 +418,11 @@ export function useBacklogData() {
   // Available filter options
   const filterOptions = useMemo(() => {
     return {
-      assignees: [...new Set(allTasks.map((t) => t.assignee))].sort(),
-      squads: [...new Set(allTasks.map((t) => t.squad))].sort(),
-      clients: [...new Set(allTasks.map((t) => t.client))].sort(),
-      sectors: [...new Set(allTasks.map((t) => t.sector))].sort(),
+      assignees: [...new Set(allTasks.map((t) => t.assignee))].filter(Boolean).sort(),
+      squads: [...new Set(allTasks.map((t) => t.squad))].filter(Boolean).sort(),
+      clients: [...new Set(allTasks.map((t) => t.client))].filter(Boolean).sort(),
+      sectors: [...new Set(allTasks.map((t) => t.sector))].filter(Boolean).sort(),
+      products: [...new Set(allTasks.map((t) => t.product))].filter(Boolean).sort(),
     };
   }, [allTasks]);
 

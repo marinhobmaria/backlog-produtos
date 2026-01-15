@@ -50,6 +50,7 @@ interface BacklogFiltersProps {
     squads: string[];
     clients: string[];
     sectors: string[];
+    products: string[];
   };
   hasActiveFilters: boolean;
   activeFilterCount: number;
@@ -244,7 +245,11 @@ export function BacklogFiltersComponent({
     });
 
     filters.sector.forEach((s) => {
-      chips.push({ label: s, onRemove: () => updateFilter("sector", filters.sector.filter((x) => x !== s)) });
+      chips.push({ label: `Setor: ${s}`, onRemove: () => updateFilter("sector", filters.sector.filter((x) => x !== s)) });
+    });
+
+    filters.product.forEach((p) => {
+      chips.push({ label: `Produto: ${p}`, onRemove: () => updateFilter("product", filters.product.filter((x) => x !== p)) });
     });
 
     filters.tags.forEach((t) => {
@@ -448,7 +453,7 @@ export function BacklogFiltersComponent({
             </div>
 
             {/* Multi-select dropdowns row */}
-            <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-6">
+            <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-8">
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Status</Label>
                 <MultiSelectDropdown
@@ -476,6 +481,26 @@ export function BacklogFiltersComponent({
               </div>
 
               <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Setor</Label>
+                <MultiSelectDropdown
+                  label="Setor"
+                  options={filterOptions.sectors}
+                  selected={filters.sector}
+                  onChange={(value) => updateFilter("sector", value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Produto</Label>
+                <MultiSelectDropdown
+                  label="Produto"
+                  options={filterOptions.products}
+                  selected={filters.product}
+                  onChange={(value) => updateFilter("product", value)}
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Cliente</Label>
                 <MultiSelectDropdown
                   label="Cliente"
@@ -492,16 +517,6 @@ export function BacklogFiltersComponent({
                   options={filterOptions.assignees}
                   selected={filters.assignee}
                   onChange={(value) => updateFilter("assignee", value)}
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Setor</Label>
-                <MultiSelectDropdown
-                  label="Setor"
-                  options={filterOptions.sectors}
-                  selected={filters.sector}
-                  onChange={(value) => updateFilter("sector", value)}
                 />
               </div>
 
