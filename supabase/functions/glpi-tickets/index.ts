@@ -320,6 +320,51 @@ serve(async (req) => {
       return cleanContent;
     };
 
+    // Função para parsear título e extrair campos estruturados
+    // Formato: "Setor | Produto - [Cliente] ... - Título Limpo"
+    const parseTicketTitle = (name: string): { cleanTitle: string; sector: string; product: string; client: string } => {
+      let cleanTitle = name;
+      let sector = '';
+      let product = '';
+      let client = '';
+
+      // Padrão 1: "Setor | Produto - ..." (ex: "Produtos | Saúde Simples - ...")
+      const sectorProductMatch = name.match(/^([^|]+)\s*\|\s*([^-]+)\s*-\s*(.*)/);
+      if (sectorProductMatch) {
+        sector = sectorProductMatch[1].trim();
+        product = sectorProductMatch[2].trim();
+        cleanTitle = sectorProductMatch[3].trim();
+      }
+
+      // Padrão 2: Extrair cliente de [CLIENTE] (ex: "[OM30]", "[PRINCIPAL]")
+      // O primeiro [XXX] que não seja palavras reservadas é o cliente
+      const reservedWords = ['PRINCIPAL', 'URGENTE', 'CRÍTICO', 'CRITICO', 'PRIORIDADE', 'HOT', 'BLOCKER'];
+      const bracketMatches = cleanTitle.match(/\[([^\]]+)\]/g);
+      
+      if (bracketMatches) {
+        for (const match of bracketMatches) {
+          const content = match.slice(1, -1).trim();
+          // Se não é uma palavra reservada e não é um código tipo RUBY-XXX
+          if (!reservedWords.includes(content.toUpperCase()) && !content.match(/^[A-Z]+-\d+$/)) {
+            client = content;
+            // Remover a primeira ocorrência do cliente do título (pode haver duplicatas)
+            cleanTitle = cleanTitle.replace(match, '').trim();
+            break;
+          }
+        }
+      }
+
+      // Limpar espaços e hífens duplicados do título
+      cleanTitle = cleanTitle
+        .replace(/\s+-\s*-\s+/g, ' - ')
+        .replace(/\s+-\s*$/g, '')
+        .replace(/^\s*-\s+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      return { cleanTitle, sector, product, client };
+    };
+
     // Transformar tickets para o formato do backlog
     const backlogTasks = allTicketsWithHistory.map((ticket) => {
       const openedAt = new Date(ticket.date);
@@ -341,22 +386,30 @@ serve(async (req) => {
         content: extractCleanDescription(followup.content || '').substring(0, 500),
       }));
 
-      // Extrair setor e produto
-      const { sector, product } = extractSectorAndProduct(
+      // Parsear título para extrair campos estruturados
+      const { cleanTitle, sector: titleSector, product: titleProduct, client: titleClient } = parseTicketTitle(ticket.name);
+
+      // Extrair setor e produto da categoria (fallback)
+      const { sector: categorySector, product: categoryProduct } = extractSectorAndProduct(
         ticket.name, 
         ticket.content || '', 
         ticket.itilcategories_id
       );
 
+      // Usar valores do título, com fallback para categoria
+      const sector = titleSector || categorySector || '';
+      const product = titleProduct || categoryProduct || '';
+      const client = titleClient || (typeof ticket.entities_id === 'string' ? ticket.entities_id : 'OM30');
+
       return {
         id: `GLPI-${ticket.id}`,
-        title: ticket.name,
+        title: cleanTitle,
         status: statusMap[ticket.status] || 'open',
         priority: priorityMap[ticket.priority] || 'normal',
         type: typeMap[ticket.type] || 'incident',
         assignee: typeof ticket.users_id_recipient === 'string' ? ticket.users_id_recipient : 'Não atribuído',
         squad: 'Suporte',
-        client: typeof ticket.entities_id === 'string' ? ticket.entities_id : 'OM30',
+        client,
         sector,
         product,
         tags,
