@@ -615,6 +615,7 @@ export function useBacklogData() {
   return {
     // Data
     tasks: paginatedTasks,
+    allTasks,
     allFilteredTasks: filteredTasks,
     totalTasks: sortedTasks.length,
     metrics,
