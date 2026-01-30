@@ -15,24 +15,54 @@ import { subDays, differenceInDays, format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
-interface GLPITask {
+interface GlpiTicket {
   id: string;
+  glpi_id: number;
   title: string;
-  status: string;
-  priority: string;
-  type: string;
-  assignee: string;
-  squad: string;
-  client: string;
-  sector: string;
-  product: string;
-  tags: string[];
-  openedAt: string;
-  lastUpdatedAt: string;
-  daysSinceLastAction: number;
-  slaDeadline: string | null;
-  isSlaBreach: boolean;
+  description: string | null;
+  status: number;
+  priority: number;
+  sector: string | null;
+  product: string | null;
+  client: string | null;
+  requester: string | null;
+  assigned_to: string | null;
+  category: string | null;
+  created_at: string;
+  updated_at: string;
+  due_date: string | null;
+  glpi_created_at: string | null;
+  glpi_updated_at: string | null;
+}
+
+const statusNumToString: Record<number, TaskStatus> = {
+  1: 'open',
+  2: 'in_progress',
+  3: 'in_progress',
+  4: 'pending',
+  5: 'resolved',
+  6: 'closed',
+};
+
+const priorityNumToString: Record<number, TaskPriority> = {
+  1: 'low',
+  2: 'low',
+  3: 'normal',
+  4: 'high',
+  5: 'urgent',
+  6: 'urgent',
+};
+
+interface TaskContent {
+  id: string;
   content?: string;
+  history?: Array<{
+    id: string;
+    date: string;
+    user: string;
+    action: string;
+    content?: string;
+  }>;
 }
 
 const initialFilters: BacklogFilters = {
@@ -52,31 +82,12 @@ const initialFilters: BacklogFilters = {
 };
 
 const SAVED_FILTERS_KEY = "backlog_saved_filters";
-const CACHE_KEY = "backlog_tasks_cache";
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
-
-interface CachedData {
-  tasks: BacklogTask[];
-  taskContents: Record<string, TaskContent>;
-  timestamp: number;
-}
-
-interface TaskContent {
-  id: string;
-  content?: string;
-  history?: Array<{
-    id: string;
-    date: string;
-    user: string;
-    action: string;
-    content?: string;
-  }>;
-}
 
 export function useBacklogData() {
   const [allTasks, setAllTasks] = useState<BacklogTask[]>([]);
   const [taskContents, setTaskContents] = useState<Record<string, TaskContent>>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<BacklogFilters>(initialFilters);
   const [currentPage, setCurrentPage] = useState(1);
@@ -96,128 +107,113 @@ export function useBacklogData() {
     }
   });
 
-  // Try to load from cache
-  const loadFromCache = useCallback((): CachedData | null => {
-    try {
-      const cached = sessionStorage.getItem(CACHE_KEY);
-      if (!cached) return null;
-      
-      const data: CachedData = JSON.parse(cached);
-      const now = Date.now();
-      
-      // Check if cache is still valid
-      if (now - data.timestamp > CACHE_DURATION) {
-        sessionStorage.removeItem(CACHE_KEY);
-        return null;
-      }
-      
-      // Reconstruct Date objects
-      data.tasks = data.tasks.map(task => ({
-        ...task,
-        openedAt: new Date(task.openedAt),
-        lastUpdatedAt: new Date(task.lastUpdatedAt),
-        slaDeadline: task.slaDeadline ? new Date(task.slaDeadline) : undefined,
-      }));
-      
-      return data;
-    } catch {
-      return null;
-    }
+  // Convert DB ticket to BacklogTask
+  const convertTicketToTask = useCallback((ticket: GlpiTicket): BacklogTask => {
+    const openedAt = ticket.glpi_created_at ? new Date(ticket.glpi_created_at) : new Date(ticket.created_at);
+    const lastUpdatedAt = ticket.glpi_updated_at ? new Date(ticket.glpi_updated_at) : new Date(ticket.updated_at);
+    const now = new Date();
+    const daysSinceLastAction = Math.floor((now.getTime() - lastUpdatedAt.getTime()) / (1000 * 60 * 60 * 24));
+
+    const tags: TaskTag[] = [];
+    if (daysSinceLastAction > 7) tags.push('stale');
+    if (ticket.priority >= 5) tags.push('critical');
+    if (daysSinceLastAction > 14) tags.push('attention');
+
+    return {
+      id: `GLPI-${ticket.glpi_id}`,
+      title: ticket.title,
+      status: statusNumToString[ticket.status] || 'open',
+      priority: priorityNumToString[ticket.priority] || 'normal',
+      type: (ticket.category as TaskType) || 'incident',
+      assignee: ticket.assigned_to || 'Não atribuído',
+      squad: 'Suporte',
+      client: ticket.client || '',
+      sector: ticket.sector || '',
+      product: ticket.product || '',
+      tags,
+      openedAt,
+      lastUpdatedAt,
+      daysSinceLastAction,
+      slaDeadline: ticket.due_date ? new Date(ticket.due_date) : undefined,
+      isSlaBreach: daysSinceLastAction > 5,
+    };
   }, []);
 
-  // Save to cache
-  const saveToCache = useCallback((tasks: BacklogTask[], contents: Record<string, TaskContent>) => {
-    try {
-      const cacheData: CachedData = {
-        tasks,
-        taskContents: contents,
-        timestamp: Date.now(),
-      };
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
-    } catch (err) {
-      console.warn("Failed to cache data:", err);
-    }
-  }, []);
-
-  // Fetch tasks from GLPI
-  const fetchGLPITasks = useCallback(async (forceRefresh = false) => {
-    // Check cache first (unless forcing refresh)
-    if (!forceRefresh) {
-      const cached = loadFromCache();
-      if (cached) {
-        console.log("Usando dados do cache");
-        setAllTasks(cached.tasks);
-        setTaskContents(cached.taskContents);
-        setIsLoading(false);
-        return;
-      }
-    }
-
+  // Fetch tickets from Supabase database
+  const fetchFromDatabase = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     
     try {
-      console.log("Buscando tickets do GLPI...");
-      const { data, error: invokeError } = await supabase.functions.invoke("glpi-tickets");
-      
-      if (invokeError) {
-        throw new Error(invokeError.message);
+      console.log("Buscando tickets do banco de dados...");
+      const { data, error: dbError } = await supabase
+        .from('glpi_tickets')
+        .select('*')
+        .order('glpi_updated_at', { ascending: false });
+
+      if (dbError) throw dbError;
+
+      if (!data || data.length === 0) {
+        console.log("Banco vazio, sincronizando com GLPI...");
+        await syncWithGLPI();
+        return;
       }
 
-      if (!data.success) {
-        throw new Error(data.error || "Erro ao buscar tickets");
-      }
-
-      const tasks: BacklogTask[] = data.tickets.map((ticket: GLPITask) => ({
-        id: ticket.id,
-        title: ticket.title,
-        status: ticket.status as TaskStatus,
-        priority: ticket.priority as TaskPriority,
-        type: ticket.type as TaskType,
-        assignee: ticket.assignee,
-        squad: ticket.squad,
-        client: ticket.client,
-        sector: ticket.sector,
-        product: ticket.product || '',
-        tags: ticket.tags as TaskTag[],
-        openedAt: new Date(ticket.openedAt),
-        lastUpdatedAt: new Date(ticket.lastUpdatedAt),
-        daysSinceLastAction: ticket.daysSinceLastAction,
-        slaDeadline: ticket.slaDeadline ? new Date(ticket.slaDeadline) : undefined,
-        isSlaBreach: ticket.isSlaBreach,
-      }));
-
-      // Build task contents map
+      const tasks = data.map(convertTicketToTask);
       const contents: Record<string, TaskContent> = {};
-      data.tickets.forEach((ticket: GLPITask & { history?: Array<{ id: string; date: string; user: string; action: string; content?: string }> }) => {
-        contents[ticket.id] = {
-          id: ticket.id,
-          content: ticket.content,
-          history: ticket.history || [],
+      data.forEach((ticket: GlpiTicket) => {
+        contents[`GLPI-${ticket.glpi_id}`] = {
+          id: `GLPI-${ticket.glpi_id}`,
+          content: ticket.description || '',
+          history: [],
         };
       });
 
       setAllTasks(tasks);
       setTaskContents(contents);
-      saveToCache(tasks, contents);
-      toast.success(`${tasks.length} tickets carregados do GLPI`);
+      console.log(`${tasks.length} tickets carregados do banco`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
       setError(errorMessage);
-      toast.error(`Erro ao carregar tickets: ${errorMessage}`);
-      console.error("Erro ao buscar tickets:", err);
+      console.error("Erro ao buscar do banco:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [loadFromCache, saveToCache]);
+  }, [convertTicketToTask]);
 
-  // Refetch with force refresh
-  const refetch = useCallback(() => fetchGLPITasks(true), [fetchGLPITasks]);
+  // Sync with GLPI (calls edge function which saves to DB)
+  const syncWithGLPI = useCallback(async () => {
+    setIsSyncing(true);
+    setError(null);
+    
+    try {
+      console.log("Sincronizando com GLPI...");
+      const { data, error: invokeError } = await supabase.functions.invoke("glpi-tickets");
+      
+      if (invokeError) throw new Error(invokeError.message);
+      if (!data.success) throw new Error(data.error || "Erro ao sincronizar");
 
-  // Fetch on mount (from cache if available)
+      toast.success(`${data.saved || data.total} tickets sincronizados`);
+      
+      // Reload from database after sync
+      await fetchFromDatabase();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Erro desconhecido";
+      setError(errorMessage);
+      toast.error(`Erro ao sincronizar: ${errorMessage}`);
+      console.error("Erro ao sincronizar:", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [fetchFromDatabase]);
+
+  // Refetch triggers a new sync with GLPI
+  const refetch = useCallback(() => syncWithGLPI(), [syncWithGLPI]);
+
+  // Fetch from database on mount
   useEffect(() => {
-    fetchGLPITasks(false);
-  }, [fetchGLPITasks]);
+    fetchFromDatabase();
+  }, [fetchFromDatabase]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -625,8 +621,10 @@ export function useBacklogData() {
     dailyOpenings,
     filterOptions,
     isLoading,
+    isSyncing,
     error,
     refetch,
+    syncWithGLPI,
 
     // Pagination
     currentPage,
