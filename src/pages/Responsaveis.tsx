@@ -1,19 +1,19 @@
 import { useState, useMemo } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useBacklogData } from "@/hooks/useBacklogData";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BacklogTable } from "@/components/backlog/BacklogTable";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { 
   User, 
   Search, 
@@ -24,7 +24,8 @@ import {
   Loader2,
   Timer,
   TableIcon,
-  LayoutGrid
+  LayoutGrid,
+  Layers
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BacklogTask, TaskStatus } from "@/types";
@@ -46,13 +47,22 @@ interface AssigneeGroup {
   avgDaysOpen: number;
 }
 
+type GroupByOption = "none" | "status" | "sector" | "client" | "assignee";
+
 export default function Responsaveis() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedAssignee, setSelectedAssignee] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
+  const [groupBy, setGroupBy] = useState<GroupByOption>("none");
   
-  const { allTasks, isLoading, refetch } = useBacklogData();
+  const { 
+    allTasks, 
+    isLoading, 
+    refetch,
+    taskContents,
+    exportToXLS,
+  } = useBacklogData();
 
   const handleRefresh = async () => {
     await refetch();
@@ -79,7 +89,6 @@ export default function Responsaveis() {
       }
     });
 
-    // Calculate average days open for active tasks
     groups.forEach((group) => {
       const activeTasks = group.tasks.filter(t => t.status !== "closed" && t.status !== "resolved");
       if (activeTasks.length > 0) {
@@ -104,11 +113,51 @@ export default function Responsaveis() {
     return "text-muted-foreground";
   };
 
+  // Group tasks for kanban view
+  const groupedTasks = useMemo(() => {
+    if (!selectedGroup) return {};
+    
+    const tasks = selectedGroup.tasks;
+    
+    if (groupBy === "none" || groupBy === "status") {
+      // Default: group by status
+      return {
+        open: tasks.filter(t => t.status === "open"),
+        in_progress: tasks.filter(t => t.status === "in_progress"),
+        pending: tasks.filter(t => t.status === "pending"),
+        resolved: tasks.filter(t => t.status === "resolved"),
+        closed: tasks.filter(t => t.status === "closed"),
+      };
+    }
+    
+    const grouped: Record<string, BacklogTask[]> = {};
+    tasks.forEach(task => {
+      const key = groupBy === "sector" ? (task.sector || "Sem Setor") 
+                : groupBy === "client" ? (task.client || "Sem Cliente")
+                : (task.assignee || "Não Atribuído");
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(task);
+    });
+    return grouped;
+  }, [selectedGroup, groupBy]);
+
+  // Prepare tasks for BacklogTable
+  const tableData = useMemo(() => {
+    if (!selectedGroup) return { tasks: [], total: 0 };
+    
+    let tasks = [...selectedGroup.tasks];
+    
+    // Sort by days since last action (most stale first)
+    tasks.sort((a, b) => (b.daysSinceLastAction || 0) - (a.daysSinceLastAction || 0));
+    
+    return { tasks, total: tasks.length };
+  }, [selectedGroup]);
+
   return (
     <AppLayout onRefresh={handleRefresh} isRefreshing={isLoading} lastUpdated={lastUpdated}>
       <div className="w-full h-[calc(100vh-44px)] flex">
         {/* Left Panel - Assignee List */}
-        <div className="w-80 border-r border-border flex flex-col">
+        <div className="w-72 border-r border-border flex flex-col shrink-0">
           <div className="p-3 border-b border-border">
             <div className="flex items-center gap-2 mb-3">
               <User className="h-4 w-4 text-primary" />
@@ -165,126 +214,90 @@ export default function Responsaveis() {
           </ScrollArea>
         </div>
 
-        {/* Right Panel - Tasks Board */}
+        {/* Right Panel - Tasks */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {selectedGroup ? (
             <>
-              <div className="p-3 border-b border-border bg-muted/30">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold">{selectedGroup.name}</h3>
-                      <p className="text-xs text-muted-foreground">
-                        {selectedGroup.tasks.length} tarefas • {selectedGroup.activeCount} ativas
-                      </p>
-                    </div>
+              <div className="p-3 border-b border-border bg-muted/30 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
+                    <User className="h-4 w-4 text-primary" />
                   </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                      {Object.entries(statusConfig).map(([status, config]) => {
-                        const count = selectedGroup.tasks.filter(t => t.status === status).length;
-                        if (count === 0) return null;
-                        return (
-                          <Badge key={status} variant="outline" className="text-xs gap-1">
-                            <div className={cn("w-2 h-2 rounded-full", config.color)} />
-                            {count}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                    <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
-                      <TabsList className="h-8">
-                        <TabsTrigger value="table" className="h-7 px-2 text-xs gap-1">
-                          <TableIcon className="h-3.5 w-3.5" />
-                          Tabela
-                        </TabsTrigger>
-                        <TabsTrigger value="kanban" className="h-7 px-2 text-xs gap-1">
-                          <LayoutGrid className="h-3.5 w-3.5" />
-                          Kanban
-                        </TabsTrigger>
-                      </TabsList>
-                    </Tabs>
+                  <div>
+                    <h3 className="font-semibold text-sm">{selectedGroup.name}</h3>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedGroup.tasks.length} tarefas • {selectedGroup.activeCount} ativas
+                    </p>
                   </div>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  {/* Group By */}
+                  <div className="flex items-center gap-1.5">
+                    <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupByOption)}>
+                      <SelectTrigger className="h-7 w-[110px] text-xs">
+                        <SelectValue placeholder="Agrupar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem grupo</SelectItem>
+                        <SelectItem value="status">Status</SelectItem>
+                        <SelectItem value="sector">Setor</SelectItem>
+                        <SelectItem value="client">Cliente</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {/* View Toggle */}
+                  <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "table" | "kanban")}>
+                    <TabsList className="h-7">
+                      <TabsTrigger value="table" className="h-6 px-2 text-xs gap-1">
+                        <TableIcon className="h-3 w-3" />
+                        Tabela
+                      </TabsTrigger>
+                      <TabsTrigger value="kanban" className="h-6 px-2 text-xs gap-1">
+                        <LayoutGrid className="h-3 w-3" />
+                        Kanban
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
               </div>
               
-              {/* Content based on view mode */}
+              {/* Content */}
               {viewMode === "table" ? (
                 <div className="flex-1 overflow-auto p-3">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]">ID</TableHead>
-                        <TableHead>Título</TableHead>
-                        <TableHead className="w-[120px]">Status</TableHead>
-                        <TableHead className="w-[120px]">Setor</TableHead>
-                        <TableHead className="w-[120px]">Cliente</TableHead>
-                        <TableHead className="w-[100px]">Aberto há</TableHead>
-                        <TableHead className="w-[100px]">Parado há</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedGroup.tasks
-                        .sort((a, b) => (b.daysSinceLastAction || 0) - (a.daysSinceLastAction || 0))
-                        .map((task) => {
-                          const config = statusConfig[task.status];
-                          return (
-                            <TableRow key={task.id} className="cursor-pointer hover:bg-muted/50">
-                              <TableCell className="font-mono text-xs">{task.id}</TableCell>
-                              <TableCell>
-                                <p className="text-sm font-medium line-clamp-1">{task.title}</p>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline" className="text-xs gap-1">
-                                  <div className={cn("w-2 h-2 rounded-full", config.color)} />
-                                  {config.label}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {task.sector || "-"}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground truncate max-w-[120px]">
-                                {task.client || "-"}
-                              </TableCell>
-                              <TableCell className="text-xs text-muted-foreground">
-                                {formatDistanceToNow(new Date(task.openedAt), { 
-                                  locale: ptBR 
-                                })}
-                              </TableCell>
-                              <TableCell>
-                                {task.status !== "closed" && task.status !== "resolved" ? (
-                                  <Badge 
-                                    variant="outline" 
-                                    className={cn("text-[10px]", getTimeColor(task.daysSinceLastAction || 0))}
-                                  >
-                                    {task.daysSinceLastAction || 0}d
-                                  </Badge>
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">-</span>
-                                )}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                    </TableBody>
-                  </Table>
+                  <BacklogTable
+                    tasks={tableData.tasks}
+                    totalTasks={tableData.total}
+                    currentPage={1}
+                    totalPages={1}
+                    pageSize={tableData.total}
+                    sortColumn="daysSinceLastAction"
+                    sortDirection="desc"
+                    onSort={() => {}}
+                    onPageChange={() => {}}
+                    onPageSizeChange={() => {}}
+                    onExport={exportToXLS}
+                    taskContents={taskContents}
+                  />
                 </div>
               ) : (
-                /* Kanban view */
                 <div className="flex-1 overflow-x-auto p-3">
                   <div className="flex gap-3 h-full min-w-max">
-                    {(["open", "in_progress", "pending", "resolved", "closed"] as TaskStatus[]).map((status) => {
-                      const config = statusConfig[status];
-                      const tasks = selectedGroup.tasks.filter(t => t.status === status);
+                    {Object.entries(groupedTasks).map(([key, tasks]) => {
+                      const config = statusConfig[key as TaskStatus];
+                      const isStatusGroup = groupBy === "none" || groupBy === "status";
                       
                       return (
-                        <div key={status} className="w-72 flex flex-col">
+                        <div key={key} className="w-72 flex flex-col">
                           <div className="flex items-center gap-2 mb-2 px-1">
-                            <div className={cn("w-2.5 h-2.5 rounded-full", config.color)} />
-                            <span className="font-medium text-sm">{config.label}</span>
+                            {isStatusGroup && config && (
+                              <div className={cn("w-2.5 h-2.5 rounded-full", config.color)} />
+                            )}
+                            <span className="font-medium text-sm">
+                              {isStatusGroup && config ? config.label : key}
+                            </span>
                             <Badge variant="secondary" className="text-[10px]">{tasks.length}</Badge>
                           </div>
                           
@@ -310,19 +323,12 @@ export default function Responsaveis() {
                                       )}
                                     </div>
                                     
-                                    {task.client && (
-                                      <p className="text-[10px] text-muted-foreground mt-2 truncate">
-                                        {task.client}
-                                      </p>
+                                    {!isStatusGroup && (
+                                      <Badge variant="outline" className="text-[9px] mt-2 gap-1">
+                                        <div className={cn("w-1.5 h-1.5 rounded-full", statusConfig[task.status]?.color)} />
+                                        {statusConfig[task.status]?.label}
+                                      </Badge>
                                     )}
-                                    
-                                    <div className="flex items-center gap-1 mt-2 flex-wrap">
-                                      {task.tags?.slice(0, 2).map((tag) => (
-                                        <Badge key={tag} variant="outline" className="text-[9px] h-4">
-                                          {tag}
-                                        </Badge>
-                                      ))}
-                                    </div>
                                   </CardContent>
                                 </Card>
                               ))}

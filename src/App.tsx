@@ -7,7 +7,6 @@ import Auth from "./pages/Auth";
 import Produtos from "./pages/Produtos";
 import Responsaveis from "./pages/Responsaveis";
 import Status from "./pages/Status";
-import Kanban from "./pages/Kanban";
 import Roadmap from "./pages/Roadmap";
 import Configuracoes from "./pages/Configuracoes";
 import ExecutiveDashboard from "./pages/ExecutiveDashboard";
@@ -29,7 +28,7 @@ const App = () => (
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/responsaveis" element={<Responsaveis />} />
           <Route path="/status" element={<Status />} />
-          <Route path="/kanban" element={<Kanban />} />
+          <Route path="/kanban" element={<Navigate to="/produtos" replace />} />
           <Route path="/roadmap" element={<Roadmap />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/dashboard-executivo" element={<ExecutiveDashboard />} />

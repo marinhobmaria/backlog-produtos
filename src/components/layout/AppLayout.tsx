@@ -22,7 +22,6 @@ import {
   User,
   RefreshCw,
   Loader2,
-  LayoutGrid,
   CalendarDays,
   CheckCircle2
 } from "lucide-react";
@@ -51,7 +50,6 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
     { label: "Backlog", href: "/produtos", icon: Package },
     { label: "Responsáveis", href: "/responsaveis", icon: User },
     { label: "Status", href: "/status", icon: CheckCircle2 },
-    { label: "Kanban", href: "/kanban", icon: LayoutGrid },
     { label: "Roadmap", href: "/roadmap", icon: CalendarDays },
     { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },
   ];
