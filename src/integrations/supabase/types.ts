@@ -14,7 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      glpi_sync_history: {
+        Row: {
+          duration_ms: number | null
+          error_message: string | null
+          id: string
+          success: boolean
+          synced_at: string
+          tickets_count: number | null
+        }
+        Insert: {
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          success?: boolean
+          synced_at?: string
+          tickets_count?: number | null
+        }
+        Update: {
+          duration_ms?: number | null
+          error_message?: string | null
+          id?: string
+          success?: boolean
+          synced_at?: string
+          tickets_count?: number | null
+        }
+        Relationships: []
+      }
+      glpi_tickets: {
+        Row: {
+          assigned_to: string | null
+          category: string | null
+          client: string | null
+          created_at: string
+          description: string | null
+          due_date: string | null
+          glpi_created_at: string | null
+          glpi_id: number
+          glpi_updated_at: string | null
+          id: string
+          priority: number
+          product: string | null
+          requester: string | null
+          sector: string | null
+          status: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          category?: string | null
+          client?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          glpi_created_at?: string | null
+          glpi_id: number
+          glpi_updated_at?: string | null
+          id?: string
+          priority?: number
+          product?: string | null
+          requester?: string | null
+          sector?: string | null
+          status?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          category?: string | null
+          client?: string | null
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          glpi_created_at?: string | null
+          glpi_id?: number
+          glpi_updated_at?: string | null
+          id?: string
+          priority?: number
+          product?: string | null
+          requester?: string | null
+          sector?: string | null
+          status?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

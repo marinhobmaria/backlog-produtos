@@ -1,10 +1,16 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Supabase client com service role para bypass RLS
+const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 interface GLPITicket {
   id: number;
@@ -423,10 +429,61 @@ serve(async (req) => {
       };
     });
 
+    // Salvar tickets no Supabase
+    const startTime = Date.now();
+    console.log('Salvando tickets no Supabase...');
+    
+    let savedCount = 0;
+    let errorCount = 0;
+    
+    for (const task of backlogTasks) {
+      const glpiId = parseInt(task.id.replace('GLPI-', ''));
+      
+      const ticketData = {
+        glpi_id: glpiId,
+        title: task.title,
+        description: task.content,
+        status: parseInt(Object.entries(statusMap).find(([, v]) => v === task.status)?.[0] || '1'),
+        priority: parseInt(Object.entries(priorityMap).find(([, v]) => v === task.priority)?.[0] || '3'),
+        sector: task.sector || null,
+        product: task.product || null,
+        client: task.client || null,
+        requester: task.assignee,
+        assigned_to: task.assignee,
+        category: task.type,
+        glpi_created_at: task.openedAt,
+        glpi_updated_at: task.lastUpdatedAt,
+      };
+
+      const { error: upsertError } = await supabaseAdmin
+        .from('glpi_tickets')
+        .upsert(ticketData, { onConflict: 'glpi_id' });
+
+      if (upsertError) {
+        console.error(`Erro ao salvar ticket ${glpiId}:`, upsertError.message);
+        errorCount++;
+      } else {
+        savedCount++;
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`${savedCount} tickets salvos, ${errorCount} erros em ${duration}ms`);
+
+    // Registrar histórico de sincronização
+    await supabaseAdmin.from('glpi_sync_history').insert({
+      success: errorCount === 0,
+      tickets_count: savedCount,
+      error_message: errorCount > 0 ? `${errorCount} erros ao salvar` : null,
+      duration_ms: duration,
+    });
+
     return new Response(JSON.stringify({ 
       success: true, 
       tickets: backlogTasks,
-      total: backlogTasks.length 
+      total: backlogTasks.length,
+      saved: savedCount,
+      errors: errorCount
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -434,6 +491,18 @@ serve(async (req) => {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Erro na edge function:', errorMessage);
+    
+    // Registrar erro no histórico
+    try {
+      await supabaseAdmin.from('glpi_sync_history').insert({
+        success: false,
+        tickets_count: 0,
+        error_message: errorMessage,
+      });
+    } catch (e) {
+      console.error('Erro ao registrar histórico:', e);
+    }
+    
     return new Response(JSON.stringify({ 
       success: false, 
       error: errorMessage 
