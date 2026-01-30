@@ -23,7 +23,8 @@ import {
   RefreshCw,
   Loader2,
   CalendarDays,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -52,6 +53,7 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
     { label: "Status", href: "/status", icon: CheckCircle2 },
     { label: "Roadmap", href: "/roadmap", icon: CalendarDays },
     { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },
+    { label: "Sprint", href: "/sprint", icon: Zap },
   ];
 
   const handleSignOut = async () => {
