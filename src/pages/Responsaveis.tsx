@@ -27,6 +27,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { 
   Search, 
   Clock, 
@@ -40,7 +48,8 @@ import {
   ChevronDown,
   ChevronRight,
   User,
-  AlertTriangle
+  AlertTriangle,
+  Timer
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BacklogTask, TaskStatus } from "@/types";
@@ -475,56 +484,68 @@ export default function Responsaveis() {
                     {/* Expanded Table */}
                     <CollapsibleContent>
                       <div className="border-t">
-                        {group.tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className="flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer border-b last:border-b-0"
-                          >
-                            {/* Status indicator */}
-                            {groupBy !== "status" && (
-                              <div className={cn("w-2 h-2 rounded-full shrink-0", statusConfig[task.status]?.color)} />
-                            )}
-                            
-                            {/* Title */}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm truncate">{task.title}</p>
-                            </div>
-                            
-                            {/* Assignee (if not grouped by assignee) */}
-                            {groupBy !== "assignee" && task.assignee && (
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground w-32 shrink-0">
-                                <User className="h-3 w-3" />
-                                <span className="truncate">{task.assignee}</span>
-                              </div>
-                            )}
-                            
-                            {/* Status badge (if not grouped by status) */}
-                            {groupBy !== "status" && (
-                              <Badge variant="outline" className="text-[10px] gap-1 shrink-0">
-                                <div className={cn("w-1.5 h-1.5 rounded-full", statusConfig[task.status]?.color)} />
-                                {statusConfig[task.status]?.label}
-                              </Badge>
-                            )}
-                            
-                            {/* Sector */}
-                            {groupBy !== "sector" && task.sector && (
-                              <span className="text-xs text-muted-foreground w-24 truncate shrink-0">
-                                {task.sector}
-                              </span>
-                            )}
-                            
-                            {/* Time info */}
-                            <div className="flex items-center gap-3 shrink-0">
-                              <span className="text-xs text-muted-foreground w-24">
-                                {formatDistanceToNow(new Date(task.openedAt), { locale: ptBR })}
-                              </span>
-                              <span className={cn("text-xs font-medium w-12 text-right", getTimeColor(task.daysSinceLastAction))}>
-                                {task.daysSinceLastAction}d
-                              </span>
-                            </div>
+                        <Table>
+                          <TableHeader>
+                            <TableRow className="bg-muted/30 hover:bg-muted/30">
+                              <TableHead className="w-16 text-xs">ID</TableHead>
+                              <TableHead className="text-xs">Título</TableHead>
+                              {groupBy !== "status" && <TableHead className="w-28 text-xs">Status</TableHead>}
+                              {groupBy !== "assignee" && <TableHead className="w-36 text-xs">Responsável</TableHead>}
+                              {groupBy !== "sector" && <TableHead className="w-32 text-xs">Setor</TableHead>}
+                              {groupBy !== "client" && <TableHead className="w-36 text-xs">Cliente</TableHead>}
+                              <TableHead className="w-28 text-xs">Aberto há</TableHead>
+                              <TableHead className="w-28 text-xs">Parado há</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {group.tasks.slice(0, 50).map((task) => (
+                              <TableRow key={task.id} className="hover:bg-muted/20 cursor-pointer">
+                                <TableCell className="text-xs text-muted-foreground font-mono">
+                                  #{task.id.slice(0, 6)}
+                                </TableCell>
+                                <TableCell className="text-xs font-medium">
+                                  <span className="line-clamp-1">{task.title}</span>
+                                </TableCell>
+                                {groupBy !== "status" && (
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-[10px] gap-1">
+                                      <div className={cn("w-1.5 h-1.5 rounded-full", statusConfig[task.status]?.color)} />
+                                      {statusConfig[task.status]?.label}
+                                    </Badge>
+                                  </TableCell>
+                                )}
+                                {groupBy !== "assignee" && (
+                                  <TableCell className="text-xs text-muted-foreground truncate">
+                                    {task.assignee || "-"}
+                                  </TableCell>
+                                )}
+                                {groupBy !== "sector" && (
+                                  <TableCell className="text-xs text-muted-foreground truncate">
+                                    {task.sector || "-"}
+                                  </TableCell>
+                                )}
+                                {groupBy !== "client" && (
+                                  <TableCell className="text-xs text-muted-foreground truncate">
+                                    {task.client || "-"}
+                                  </TableCell>
+                                )}
+                                <TableCell className="text-xs text-muted-foreground">
+                                  {formatDistanceToNow(new Date(task.openedAt), { locale: ptBR })}
+                                </TableCell>
+                                <TableCell>
+                                  <span className={cn("text-xs font-medium", getTimeColor(task.daysSinceLastAction))}>
+                                    {task.daysSinceLastAction}d
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                        {group.tasks.length > 50 && (
+                          <div className="p-2 text-center text-xs text-muted-foreground border-t">
+                            +{group.tasks.length - 50} tarefas
                           </div>
-                        ))}
-                        
+                        )}
                         {group.tasks.length === 0 && (
                           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
                             Nenhuma tarefa

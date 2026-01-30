@@ -10,6 +10,7 @@ import Status from "./pages/Status";
 import Roadmap from "./pages/Roadmap";
 import Configuracoes from "./pages/Configuracoes";
 import ExecutiveDashboard from "./pages/ExecutiveDashboard";
+import Sprint from "./pages/Sprint";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/roadmap" element={<Roadmap />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
           <Route path="/dashboard-executivo" element={<ExecutiveDashboard />} />
+          <Route path="/sprint" element={<Sprint />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
