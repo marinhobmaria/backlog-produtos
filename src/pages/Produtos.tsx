@@ -13,13 +13,40 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Package, Table2, LayoutGrid, Layers, Clock, CheckCircle2, Circle, Loader2 } from "lucide-react";
+import { 
+  Package, 
+  Table2, 
+  LayoutGrid, 
+  Layers, 
+  Clock, 
+  CheckCircle2, 
+  Circle, 
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  AlertTriangle,
+  Timer,
+  User
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BacklogTask, TaskStatus } from "@/types";
 import { formatDistanceToNow } from "date-fns";
@@ -35,10 +62,19 @@ const statusConfig: Record<TaskStatus, { label: string; color: string }> = {
   closed: { label: "Fechado", color: "bg-gray-400" },
 };
 
+const groupByLabels: Record<GroupByOption, string> = {
+  none: "Sem agrupamento",
+  status: "Status",
+  sector: "Setor",
+  client: "Cliente",
+  assignee: "Responsável",
+};
+
 export default function Produtos() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [activeView, setActiveView] = useState<"table" | "kanban" | "summary">("table");
-  const [groupBy, setGroupBy] = useState<GroupByOption>("status");
+  const [groupBy, setGroupBy] = useState<GroupByOption>("none");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const selectedProduct = "Saúde Simples";
   
   const {
@@ -84,9 +120,47 @@ export default function Produtos() {
     setLastUpdated(new Date());
   };
 
-  // Group tasks for kanban view
+  const toggleGroup = (groupName: string) => {
+    setCollapsedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupName)) {
+        newSet.delete(groupName);
+      } else {
+        newSet.add(groupName);
+      }
+      return newSet;
+    });
+  };
+
+  const getTimeColor = (days: number) => {
+    if (days > 14) return "text-red-600";
+    if (days > 7) return "text-orange-600";
+    if (days > 3) return "text-amber-600";
+    return "text-muted-foreground";
+  };
+
+  const getGroupStats = (tasks: BacklogTask[]) => {
+    const active = tasks.filter(t => t.status !== "closed" && t.status !== "resolved").length;
+    const avgDays = tasks.length > 0 
+      ? Math.round(tasks.reduce((sum, t) => sum + (t.daysSinceLastAction || 0), 0) / tasks.length)
+      : 0;
+    return { active, avgDays };
+  };
+
+  const getGroupLabel = (key: string) => {
+    if (groupBy === "status") {
+      return statusConfig[key as TaskStatus]?.label || key;
+    }
+    return key;
+  };
+
+  // Group tasks for kanban/grouped table view
   const groupedTasks = useMemo(() => {
     const tasksToGroup = allTasks;
+    
+    if (groupBy === "none") {
+      return { "Todas as Tarefas": tasksToGroup };
+    }
     
     if (groupBy === "status") {
       return {
@@ -108,11 +182,11 @@ export default function Produtos() {
       grouped[key].push(task);
     });
     
-    // Sort groups by count
+    // Sort groups by count and sort tasks within by days since last action
     const sorted = Object.entries(grouped)
       .sort((a, b) => b[1].length - a[1].length)
       .reduce((acc, [key, value]) => {
-        acc[key] = value;
+        acc[key] = value.sort((a, b) => (b.daysSinceLastAction || 0) - (a.daysSinceLastAction || 0));
         return acc;
       }, {} as Record<string, BacklogTask[]>);
     
@@ -133,15 +207,17 @@ export default function Produtos() {
           </div>
           
           <div className="flex items-center gap-2">
-            {/* Group By (only for kanban) */}
-            {activeView === "kanban" && (
-              <div className="flex items-center gap-1.5">
+            {/* Group By - Available for table and kanban */}
+            {(activeView === "table" || activeView === "kanban") && (
+              <div className="flex items-center gap-1.5 bg-muted/50 rounded-lg px-2 py-1">
                 <Layers className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Agrupar:</span>
                 <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupByOption)}>
-                  <SelectTrigger className="h-7 w-[120px] text-xs">
-                    <SelectValue placeholder="Agrupar por" />
+                  <SelectTrigger className="h-6 w-[110px] text-xs border-0 bg-transparent p-0 focus:ring-0">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
                     <SelectItem value="status">Status</SelectItem>
                     <SelectItem value="sector">Setor</SelectItem>
                     <SelectItem value="client">Cliente</SelectItem>
@@ -186,21 +262,137 @@ export default function Produtos() {
               deleteSavedFilter={deleteSavedFilter}
             />
 
-            {/* Table */}
-            <BacklogTable
-              tasks={tasks}
-              totalTasks={totalTasks}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              pageSize={pageSize}
-              sortColumn={sortColumn}
-              sortDirection={sortDirection}
-              onSort={handleSort}
-              onPageChange={setCurrentPage}
-              onPageSizeChange={setPageSize}
-              onExport={exportToXLS}
-              taskContents={taskContents}
-            />
+            {/* Table - Grouped or Regular */}
+            {groupBy === "none" ? (
+              <BacklogTable
+                tasks={tasks}
+                totalTasks={totalTasks}
+                currentPage={currentPage}
+                totalPages={totalPages}
+                pageSize={pageSize}
+                sortColumn={sortColumn}
+                sortDirection={sortDirection}
+                onSort={handleSort}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={setPageSize}
+                onExport={exportToXLS}
+                taskContents={taskContents}
+              />
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(groupedTasks).map(([groupKey, groupTasks]) => {
+                  const isCollapsed = collapsedGroups.has(groupKey);
+                  const stats = getGroupStats(groupTasks);
+                  const statusCfg = groupBy === "status" ? statusConfig[groupKey as TaskStatus] : null;
+                  
+                  return (
+                    <Collapsible key={groupKey} open={!isCollapsed} onOpenChange={() => toggleGroup(groupKey)}>
+                      <Card className="overflow-hidden">
+                        <CollapsibleTrigger asChild>
+                          <button className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition-colors text-left">
+                            {isCollapsed ? (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            
+                            {statusCfg && (
+                              <div className={cn("w-3 h-3 rounded-full", statusCfg.color)} />
+                            )}
+                            
+                            <span className="font-semibold text-sm">{getGroupLabel(groupKey)}</span>
+                            
+                            <Badge variant="secondary" className="text-xs">
+                              {groupTasks.length}
+                            </Badge>
+                            
+                            <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                {stats.active} ativas
+                              </span>
+                              {stats.avgDays > 0 && (
+                                <span className={cn("flex items-center gap-1", getTimeColor(stats.avgDays))}>
+                                  <Timer className="h-3 w-3" />
+                                  ~{stats.avgDays}d
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        </CollapsibleTrigger>
+                        
+                        <CollapsibleContent>
+                          <div className="border-t">
+                            <Table>
+                              <TableHeader>
+                                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                                  <TableHead className="w-16 text-xs">ID</TableHead>
+                                  <TableHead className="text-xs">Título</TableHead>
+                                  {groupBy !== "status" && <TableHead className="w-28 text-xs">Status</TableHead>}
+                                  {groupBy !== "assignee" && <TableHead className="w-36 text-xs">Responsável</TableHead>}
+                                  {groupBy !== "sector" && <TableHead className="w-32 text-xs">Setor</TableHead>}
+                                  {groupBy !== "client" && <TableHead className="w-36 text-xs">Cliente</TableHead>}
+                                  <TableHead className="w-28 text-xs">Aberto há</TableHead>
+                                  <TableHead className="w-28 text-xs">Parado há</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {groupTasks.slice(0, 50).map((task) => (
+                                  <TableRow key={task.id} className="hover:bg-muted/20">
+                                    <TableCell className="text-xs text-muted-foreground font-mono">
+                                      #{task.id.slice(0, 6)}
+                                    </TableCell>
+                                    <TableCell className="text-xs font-medium">
+                                      <span className="line-clamp-1">{task.title}</span>
+                                    </TableCell>
+                                    {groupBy !== "status" && (
+                                      <TableCell>
+                                        <Badge variant="outline" className="text-[10px] gap-1">
+                                          <div className={cn("w-1.5 h-1.5 rounded-full", statusConfig[task.status]?.color)} />
+                                          {statusConfig[task.status]?.label}
+                                        </Badge>
+                                      </TableCell>
+                                    )}
+                                    {groupBy !== "assignee" && (
+                                      <TableCell className="text-xs text-muted-foreground truncate">
+                                        {task.assignee || "-"}
+                                      </TableCell>
+                                    )}
+                                    {groupBy !== "sector" && (
+                                      <TableCell className="text-xs text-muted-foreground truncate">
+                                        {task.sector || "-"}
+                                      </TableCell>
+                                    )}
+                                    {groupBy !== "client" && (
+                                      <TableCell className="text-xs text-muted-foreground truncate">
+                                        {task.client || "-"}
+                                      </TableCell>
+                                    )}
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {formatDistanceToNow(new Date(task.openedAt), { locale: ptBR })}
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className={cn("text-xs font-medium", getTimeColor(task.daysSinceLastAction))}>
+                                        {task.daysSinceLastAction}d
+                                      </span>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                            {groupTasks.length > 50 && (
+                              <div className="p-2 text-center text-xs text-muted-foreground border-t">
+                                +{groupTasks.length - 50} tarefas
+                              </div>
+                            )}
+                          </div>
+                        </CollapsibleContent>
+                      </Card>
+                    </Collapsible>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Indicadores */}
             <OperationalAlerts
@@ -223,9 +415,9 @@ export default function Produtos() {
         {activeView === "kanban" && (
           <div className="h-[calc(100vh-140px)] overflow-x-auto">
             <div className="flex gap-3 h-full min-w-max pb-3">
-              {Object.entries(groupedTasks).map(([key, tasks]) => {
+              {Object.entries(groupedTasks).map(([key, columnTasks]) => {
                 const config = statusConfig[key as TaskStatus];
-                const isStatusGroup = groupBy === "status";
+                const isStatusGroup = groupBy === "status" || groupBy === "none";
                 
                 return (
                   <div key={key} className="w-80 flex flex-col">
@@ -238,22 +430,25 @@ export default function Produtos() {
                           <div className={cn("w-3 h-3 rounded-full", config.color)} />
                         )}
                         <span className="font-semibold text-sm truncate">
-                          {isStatusGroup && config ? config.label : key}
+                          {getGroupLabel(key)}
                         </span>
-                        <Badge variant="secondary" className="text-xs ml-auto">{tasks.length}</Badge>
+                        <Badge variant="secondary" className="text-xs ml-auto">{columnTasks.length}</Badge>
                       </div>
                     </div>
                     
                     <ScrollArea className="flex-1 rounded-b-lg bg-muted/20 border-x border-b">
                       <div className="p-2 space-y-2">
-                        {tasks.slice(0, 50).map((task) => (
+                        {columnTasks.slice(0, 50).map((task) => (
                           <Card key={task.id} className="hover:shadow-md transition-shadow cursor-pointer">
                             <CardContent className="p-3">
                               <p className="font-medium text-xs mb-2 line-clamp-2">{task.title}</p>
                               
-                              <div className="flex items-center gap-2 text-[10px] text-muted-foreground mb-2">
-                                <span className="truncate">{task.assignee}</span>
-                              </div>
+                              {groupBy !== "assignee" && task.assignee && (
+                                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground mb-2">
+                                  <User className="h-3 w-3" />
+                                  <span className="truncate">{task.assignee}</span>
+                                </div>
+                              )}
                               
                               <div className="flex items-center justify-between">
                                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
@@ -279,12 +474,12 @@ export default function Produtos() {
                             </CardContent>
                           </Card>
                         ))}
-                        {tasks.length > 50 && (
+                        {columnTasks.length > 50 && (
                           <p className="text-xs text-muted-foreground text-center py-2">
-                            +{tasks.length - 50} tarefas
+                            +{columnTasks.length - 50} tarefas
                           </p>
                         )}
-                        {tasks.length === 0 && (
+                        {columnTasks.length === 0 && (
                           <p className="text-xs text-muted-foreground text-center py-8">
                             Nenhuma tarefa
                           </p>
