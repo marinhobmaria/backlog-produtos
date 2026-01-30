@@ -8,11 +8,9 @@ import { StatusChart } from "@/components/backlog/StatusChart";
 import { AgingChart } from "@/components/backlog/AgingChart";
 import { TimelineChart } from "@/components/backlog/TimelineChart";
 import { SummaryDashboard } from "@/components/backlog/SummaryDashboard";
-import { ResponsibleSummary } from "@/components/backlog/ResponsibleSummary";
-import { StatusSummary } from "@/components/backlog/StatusSummary";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, Table2, LayoutGrid, AlertTriangle, User, CheckCircle2 } from "lucide-react";
+import { Package, Table2, LayoutGrid } from "lucide-react";
 
 export default function Produtos() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -122,41 +120,14 @@ export default function Produtos() {
               taskContents={taskContents}
             />
 
-            {/* Indicadores / Responsável / Status Tabs */}
-            <Tabs defaultValue="indicadores" className="w-full">
-              <TabsList className="h-8 mb-3">
-                <TabsTrigger value="indicadores" className="h-7 px-3 text-xs gap-1.5">
-                  <AlertTriangle className="h-3.5 w-3.5" />
-                  Indicadores
-                </TabsTrigger>
-                <TabsTrigger value="responsavel" className="h-7 px-3 text-xs gap-1.5">
-                  <User className="h-3.5 w-3.5" />
-                  Responsável
-                </TabsTrigger>
-                <TabsTrigger value="status" className="h-7 px-3 text-xs gap-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Status
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="indicadores" className="mt-0">
-                <OperationalAlerts
-                  alerts={alerts}
-                  alertsOnly={filters.alertsOnly}
-                  onToggleAlertsOnly={toggleAlertsOnly}
-                  totalTasks={totalTasks}
-                  openTasks={tasks.filter(t => t.status !== 'closed' && t.status !== 'resolved').length}
-                />
-              </TabsContent>
-              
-              <TabsContent value="responsavel" className="mt-0">
-                <ResponsibleSummary tasks={allTasks} />
-              </TabsContent>
-              
-              <TabsContent value="status" className="mt-0">
-                <StatusSummary tasks={allTasks} />
-              </TabsContent>
-            </Tabs>
+            {/* Indicadores */}
+            <OperationalAlerts
+              alerts={alerts}
+              alertsOnly={filters.alertsOnly}
+              onToggleAlertsOnly={toggleAlertsOnly}
+              totalTasks={totalTasks}
+              openTasks={tasks.filter(t => t.status !== 'closed' && t.status !== 'resolved').length}
+            />
 
             {/* Charts Row */}
             <div className="grid gap-3 md:grid-cols-3">

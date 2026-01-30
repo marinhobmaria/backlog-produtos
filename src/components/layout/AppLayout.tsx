@@ -23,7 +23,8 @@ import {
   RefreshCw,
   Loader2,
   LayoutGrid,
-  CalendarDays
+  CalendarDays,
+  CheckCircle2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -48,6 +49,8 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
 
   const navItems = [
     { label: "Backlog", href: "/produtos", icon: Package },
+    { label: "Responsáveis", href: "/responsaveis", icon: User },
+    { label: "Status", href: "/status", icon: CheckCircle2 },
     { label: "Kanban", href: "/kanban", icon: LayoutGrid },
     { label: "Roadmap", href: "/roadmap", icon: CalendarDays },
     { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },
