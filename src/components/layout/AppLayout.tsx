@@ -52,8 +52,8 @@ export function AppLayout({ children, onRefresh, isRefreshing, lastUpdated }: Ap
     { label: "Responsáveis", href: "/responsaveis", icon: User },
     { label: "Status", href: "/status", icon: CheckCircle2 },
     { label: "Roadmap", href: "/roadmap", icon: CalendarDays },
-    { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },
     { label: "Sprint", href: "/sprint", icon: Zap },
+    { label: "Indicadores", href: "/dashboard-executivo", icon: BarChart3 },
   ];
 
   const handleSignOut = async () => {
