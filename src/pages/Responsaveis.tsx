@@ -8,6 +8,11 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -33,7 +38,9 @@ import {
   Filter,
   X,
   ChevronDown,
-  User
+  ChevronRight,
+  User,
+  AlertTriangle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BacklogTask, TaskStatus } from "@/types";
@@ -55,6 +62,7 @@ export default function Responsaveis() {
   const [searchTerm, setSearchTerm] = useState("");
   const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
   const [groupBy, setGroupBy] = useState<GroupByOption>("assignee");
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   
   // Filters
   const [statusFilter, setStatusFilter] = useState<TaskStatus[]>([]);
@@ -153,14 +161,44 @@ export default function Responsaveis() {
     // Sort groups by count, sort tasks by days idle
     return Object.entries(groups)
       .sort((a, b) => b[1].length - a[1].length)
-      .map(([key, tasks]) => ({
-        key,
-        label: groupBy === "status" ? (statusConfig[key as TaskStatus]?.label || key) : key,
-        tasks: tasks.sort((a, b) => (b.daysSinceLastAction || 0) - (a.daysSinceLastAction || 0)),
-        statusColor: groupBy === "status" ? statusConfig[key as TaskStatus]?.color : undefined,
-        bgColor: groupBy === "status" ? statusConfig[key as TaskStatus]?.bgColor : undefined,
-      }));
+      .map(([key, tasks]) => {
+        const sortedTasks = tasks.sort((a, b) => (b.daysSinceLastAction || 0) - (a.daysSinceLastAction || 0));
+        const stagnantCount = sortedTasks.filter(t => t.daysSinceLastAction > 7).length;
+        const avgDaysIdle = sortedTasks.length > 0 
+          ? Math.round(sortedTasks.reduce((sum, t) => sum + (t.daysSinceLastAction || 0), 0) / sortedTasks.length)
+          : 0;
+        
+        return {
+          key,
+          label: groupBy === "status" ? (statusConfig[key as TaskStatus]?.label || key) : key,
+          tasks: sortedTasks,
+          statusColor: groupBy === "status" ? statusConfig[key as TaskStatus]?.color : undefined,
+          bgColor: groupBy === "status" ? statusConfig[key as TaskStatus]?.bgColor : undefined,
+          stagnantCount,
+          avgDaysIdle,
+        };
+      });
   }, [filteredTasks, groupBy]);
+
+  const toggleGroup = (key: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  const expandAll = () => {
+    setExpandedGroups(new Set(groupedTasks.map(g => g.key)));
+  };
+
+  const collapseAll = () => {
+    setExpandedGroups(new Set());
+  };
 
   const clearFilters = () => {
     setStatusFilter([]);
@@ -341,95 +379,166 @@ export default function Responsaveis() {
           </div>
         </div>
 
-        {/* List View - ClickUp style with inline group headers */}
+        {/* List View - Collapsible Cards */}
         {viewMode === "table" && (
-          <div className="space-y-0 border rounded-lg overflow-hidden bg-card">
-            {groupedTasks.map((group, groupIndex) => (
-              <div key={group.key}>
-                {/* Group Header - Inline style like ClickUp */}
-                <div className={cn(
-                  "flex items-center gap-3 px-4 py-2.5 border-b",
-                  group.bgColor || "bg-muted/40",
-                  groupIndex > 0 && "border-t-2"
-                )}>
-                  {group.statusColor && (
-                    <div className={cn("w-3 h-3 rounded-full", group.statusColor)} />
-                  )}
-                  {!group.statusColor && groupBy === "assignee" && (
-                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
-                      <User className="h-3 w-3 text-primary" />
-                    </div>
-                  )}
-                  <span className="font-semibold text-sm">{group.label}</span>
-                  <Badge variant="secondary" className="text-[10px] h-5">
-                    {group.tasks.length}
-                  </Badge>
-                </div>
-                
-                {/* Tasks */}
-                {group.tasks.map((task, taskIndex) => (
-                  <div
-                    key={task.id}
-                    className={cn(
-                      "flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer border-b last:border-b-0",
-                      "group"
-                    )}
-                  >
-                    {/* Status indicator */}
-                    {groupBy !== "status" && (
-                      <div className={cn("w-2 h-2 rounded-full shrink-0", statusConfig[task.status]?.color)} />
-                    )}
+          <div className="space-y-3">
+            {/* Expand/Collapse All */}
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={expandAll}>
+                Expandir todos
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={collapseAll}>
+                Recolher todos
+              </Button>
+            </div>
+
+            {groupedTasks.map((group) => {
+              const isExpanded = expandedGroups.has(group.key);
+              
+              return (
+                <Collapsible
+                  key={group.key}
+                  open={isExpanded}
+                  onOpenChange={() => toggleGroup(group.key)}
+                >
+                  {/* Card Header - Always visible */}
+                  <Card className={cn(
+                    "transition-all",
+                    isExpanded && "ring-1 ring-primary/20"
+                  )}>
+                    <CollapsibleTrigger asChild>
+                      <CardContent className="p-4 cursor-pointer hover:bg-muted/30 transition-colors">
+                        <div className="flex items-center gap-4">
+                          {/* Expand/Collapse Icon */}
+                          <div className="shrink-0">
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                          
+                          {/* Avatar/Icon */}
+                          {group.statusColor ? (
+                            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", group.bgColor)}>
+                              <div className={cn("w-3 h-3 rounded-full", group.statusColor)} />
+                            </div>
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <User className="h-4 w-4 text-primary" />
+                            </div>
+                          )}
+                          
+                          {/* Name and Stats */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm truncate">{group.label}</span>
+                              <Badge variant="secondary" className="text-[10px] h-5">
+                                {group.tasks.length} tarefas
+                              </Badge>
+                            </div>
+                            
+                            {/* Mini stats when collapsed */}
+                            {!isExpanded && (
+                              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
+                                {group.stagnantCount > 0 && (
+                                  <span className="flex items-center gap-1 text-orange-600">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    {group.stagnantCount} paradas (+7d)
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  Média: {group.avgDaysIdle}d parado
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Quick Stats Badges */}
+                          <div className="flex items-center gap-2 shrink-0">
+                            {group.stagnantCount > 0 && (
+                              <Badge variant="outline" className="text-[10px] gap-1 border-orange-500/50 text-orange-600">
+                                <AlertTriangle className="h-2.5 w-2.5" />
+                                {group.stagnantCount}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-[10px] gap-1">
+                              <Clock className="h-2.5 w-2.5" />
+                              ~{group.avgDaysIdle}d
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </CollapsibleTrigger>
                     
-                    {/* Title */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm truncate">{task.title}</p>
-                    </div>
-                    
-                    {/* Assignee (if not grouped by assignee) */}
-                    {groupBy !== "assignee" && task.assignee && (
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground w-32 shrink-0">
-                        <User className="h-3 w-3" />
-                        <span className="truncate">{task.assignee}</span>
+                    {/* Expanded Table */}
+                    <CollapsibleContent>
+                      <div className="border-t">
+                        {group.tasks.map((task) => (
+                          <div
+                            key={task.id}
+                            className="flex items-center gap-4 px-4 py-2.5 hover:bg-muted/30 transition-colors cursor-pointer border-b last:border-b-0"
+                          >
+                            {/* Status indicator */}
+                            {groupBy !== "status" && (
+                              <div className={cn("w-2 h-2 rounded-full shrink-0", statusConfig[task.status]?.color)} />
+                            )}
+                            
+                            {/* Title */}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm truncate">{task.title}</p>
+                            </div>
+                            
+                            {/* Assignee (if not grouped by assignee) */}
+                            {groupBy !== "assignee" && task.assignee && (
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground w-32 shrink-0">
+                                <User className="h-3 w-3" />
+                                <span className="truncate">{task.assignee}</span>
+                              </div>
+                            )}
+                            
+                            {/* Status badge (if not grouped by status) */}
+                            {groupBy !== "status" && (
+                              <Badge variant="outline" className="text-[10px] gap-1 shrink-0">
+                                <div className={cn("w-1.5 h-1.5 rounded-full", statusConfig[task.status]?.color)} />
+                                {statusConfig[task.status]?.label}
+                              </Badge>
+                            )}
+                            
+                            {/* Sector */}
+                            {groupBy !== "sector" && task.sector && (
+                              <span className="text-xs text-muted-foreground w-24 truncate shrink-0">
+                                {task.sector}
+                              </span>
+                            )}
+                            
+                            {/* Time info */}
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="text-xs text-muted-foreground w-24">
+                                {formatDistanceToNow(new Date(task.openedAt), { locale: ptBR })}
+                              </span>
+                              <span className={cn("text-xs font-medium w-12 text-right", getTimeColor(task.daysSinceLastAction))}>
+                                {task.daysSinceLastAction}d
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {group.tasks.length === 0 && (
+                          <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                            Nenhuma tarefa
+                          </div>
+                        )}
                       </div>
-                    )}
-                    
-                    {/* Status badge (if not grouped by status) */}
-                    {groupBy !== "status" && (
-                      <Badge variant="outline" className="text-[10px] gap-1 shrink-0">
-                        <div className={cn("w-1.5 h-1.5 rounded-full", statusConfig[task.status]?.color)} />
-                        {statusConfig[task.status]?.label}
-                      </Badge>
-                    )}
-                    
-                    {/* Sector */}
-                    {groupBy !== "sector" && task.sector && (
-                      <span className="text-xs text-muted-foreground w-24 truncate shrink-0">
-                        {task.sector}
-                      </span>
-                    )}
-                    
-                    {/* Time info */}
-                    <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-muted-foreground w-24">
-                        {formatDistanceToNow(new Date(task.openedAt), { locale: ptBR })}
-                      </span>
-                      <span className={cn("text-xs font-medium w-12 text-right", getTimeColor(task.daysSinceLastAction))}>
-                        {task.daysSinceLastAction}d
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                
-                {group.tasks.length === 0 && (
-                  <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-                    Nenhuma tarefa
-                  </div>
-                )}
-              </div>
-            ))}
+                    </CollapsibleContent>
+                  </Card>
+                </Collapsible>
+              );
+            })}
             
             {groupedTasks.length === 0 && (
-              <div className="p-12 text-center text-muted-foreground">
+              <div className="p-12 text-center text-muted-foreground border rounded-lg bg-card">
                 <Search className="h-8 w-8 mx-auto mb-2 opacity-30" />
                 <p className="text-sm">Nenhuma tarefa encontrada</p>
                 {activeFilterCount > 0 && (
