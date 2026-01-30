@@ -5,6 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./pages/Auth";
 import Produtos from "./pages/Produtos";
+import Responsaveis from "./pages/Responsaveis";
+import Status from "./pages/Status";
 import Kanban from "./pages/Kanban";
 import Roadmap from "./pages/Roadmap";
 import Configuracoes from "./pages/Configuracoes";
@@ -25,6 +27,8 @@ const App = () => (
           <Route path="/dashboard" element={<Navigate to="/produtos" replace />} />
           <Route path="/backlog" element={<Navigate to="/produtos" replace />} />
           <Route path="/produtos" element={<Produtos />} />
+          <Route path="/responsaveis" element={<Responsaveis />} />
+          <Route path="/status" element={<Status />} />
           <Route path="/kanban" element={<Kanban />} />
           <Route path="/roadmap" element={<Roadmap />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
