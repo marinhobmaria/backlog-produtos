@@ -1,576 +1,430 @@
 
-# Extração Completa: Regras de Interface, Status, Credenciais GLPI e Views
+# Documentacao de Produto - Sistema de Gestao de Backlog
 
-Este documento contém todo o código e configurações necessários para replicar o sistema de Backlog/Tickets em outro projeto.
+## 1. Visao Geral do Produto
+
+O **Sistema de Gestao de Backlog** e uma aplicacao web desenvolvida para gerenciamento e visualizacao de tickets/chamados oriundos do sistema GLPI. A aplicacao oferece multiplas visoes (tabela, kanban, resumo) com filtros avancados, metricas operacionais e sincronizacao automatica com o GLPI.
+
+### 1.1 Objetivo Principal
+Centralizar a visualizacao e acompanhamento de tickets de suporte, permitindo gestao por responsavel, status, setor, cliente e produto, com alertas visuais para tarefas criticas ou paradas.
+
+### 1.2 Publico-Alvo
+- Gestores de TI e Suporte
+- Analistas de Suporte
+- Coordenadores de Produto
+- Equipes de Atendimento
 
 ---
 
-## 1. ESTRUTURA DE PASTAS NECESSÁRIA
+## 2. Arquitetura Tecnica
+
+### 2.1 Stack Tecnologico
+| Camada | Tecnologias |
+|--------|-------------|
+| Frontend | React 18, TypeScript, Vite |
+| Estilizacao | Tailwind CSS, Radix UI, Lucide Icons |
+| Estado | React Hooks, TanStack Query |
+| Graficos | Recharts |
+| Backend | Lovable Cloud (Supabase) |
+| Edge Functions | Deno (TypeScript) |
+| Banco de Dados | PostgreSQL |
+| Integracao | API REST GLPI |
+
+### 2.2 Estrutura de Modulos
 
 ```text
-src/
-├── types/
-│   └── index.ts
-├── hooks/
-│   ├── useAuth.ts
-│   ├── useBacklogData.ts
-│   └── useGlpiTickets.ts
-├── components/
-│   ├── layout/
-│   │   └── AppLayout.tsx
-│   └── backlog/
-│       ├── BacklogTable.tsx
-│       ├── BacklogFilters.tsx
-│       ├── TaskDetailSheet.tsx
-│       ├── StatusChart.tsx
-│       ├── AgingChart.tsx
-│       ├── TimelineChart.tsx
-│       ├── OperationalAlerts.tsx
-│       └── SummaryDashboard.tsx
-├── pages/
-│   ├── Auth.tsx
-│   ├── Produtos.tsx (Backlog)
-│   ├── Responsaveis.tsx
-│   └── Status.tsx
-└── integrations/
-    └── supabase/
-        └── client.ts
-supabase/
-└── functions/
-    └── glpi-tickets/
-        └── index.ts
++------------------------+     +------------------------+
+|     GLPI (Externo)     |     |    Frontend React      |
+|   Sistema de Tickets   |     |                        |
++-----------+------------+     +------------+-----------+
+            |                               |
+            v                               v
++-----------+------------+     +------------+-----------+
+|  Edge Function         |     |  Componentes           |
+|  glpi-tickets          |     |  - BacklogTable        |
+|  - Sincronizacao       |     |  - BacklogFilters      |
+|  - Parse de dados      |     |  - TaskDetailSheet     |
+|  - Upsert no DB        |     |  - Charts (Status,     |
++-----------+------------+     |    Aging, Timeline)    |
+            |                  +------------+-----------+
+            v                               |
++-----------+------------+                  |
+|   Supabase Database    |<-----------------+
+|   - glpi_tickets       |
+|   - glpi_sync_history  |
++------------------------+
 ```
 
 ---
 
-## 2. TIPOS E INTERFACES (src/types/index.ts)
+## 3. Modelos de Dados
 
-```typescript
-// Configuration types
-export interface GLPIConfig {
-  url: string;
-  appToken: string;
-  userToken: string;
-}
-
-export interface ClickUpConfig {
-  apiKey: string;
-  teamId: string;
-  webhookId?: string;
-}
-
-export interface StatusMapping {
-  clickup: string;
-  glpi: string;
-  glpiCode: number;
-}
-
-export interface Config {
-  glpi: GLPIConfig;
-  clickup: ClickUpConfig;
-  mappings: {
-    status: StatusMapping[];
-  };
-}
-
-// Sync types
-export type SyncStatus = 'pending' | 'processing' | 'success' | 'error';
-export type SyncType = 'create' | 'update';
-
-export interface SyncItem {
-  id: string;
-  clickupId: string;
-  glpiId?: number;
-  type: SyncType;
-  status: SyncStatus;
-  attempts: number;
-  data: {
-    name: string;
-    content: string;
-    status: string;
-    priority: string;
-    assignee?: string;
-    customFields: Record<string, unknown>;
-  };
-  error?: string;
-  createdAt: Date;
-  processedAt?: Date;
-}
-
-// Log types
-export type LogLevel = 'info' | 'warning' | 'error';
-export type LogOperation = 'create' | 'update' | 'sync' | 'webhook' | 'connection';
-
-export interface LogEntry {
-  id: string;
-  timestamp: Date;
-  level: LogLevel;
-  operation: LogOperation;
-  clickupId?: string;
-  glpiId?: number;
-  message: string;
-  details?: unknown;
-}
-
-// Dashboard metrics
-export interface SyncMetrics {
-  totalToday: number;
-  totalWeek: number;
-  totalMonth: number;
-  pendingQueue: number;
-  successRate: number;
-  lastError?: string;
-  lastErrorTime?: Date;
-}
-
-export interface ConnectionStatus {
-  clickup: {
-    connected: boolean;
-    lastCheck: Date;
-    error?: string;
-  };
-  glpi: {
-    connected: boolean;
-    lastCheck: Date;
-    error?: string;
-  };
-}
-
-// Chart data
-export interface DailySync {
-  date: string;
-  success: number;
-  error: number;
-}
-
-// Backlog types
-export type TaskPriority = 'urgent' | 'high' | 'normal' | 'low';
-export type TaskStatus = 'open' | 'in_progress' | 'pending' | 'resolved' | 'closed';
-export type TaskType = 'incident' | 'request' | 'problem' | 'change';
-export type TaskTag = 'critical' | 'attention' | 'sla_breached' | 'dependency' | 'no_owner' | 'stale';
-
-export interface BacklogTask {
-  id: string;
-  title: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  type: TaskType;
-  assignee: string;
-  squad: string;
-  client: string;
-  sector: string;
-  product: string;
-  tags: TaskTag[];
-  openedAt: Date;
-  lastUpdatedAt: Date;
-  daysSinceLastAction: number;
-  slaDeadline?: Date;
-  isSlaBreach: boolean;
-}
-
-export interface BacklogFilters {
-  startDate: Date | null;
-  endDate: Date | null;
-  status: TaskStatus[];
-  assignee: string[];
-  squad: string[];
-  priority: TaskPriority[];
-  type: TaskType[];
-  client: string[];
-  sector: string[];
-  product: string[];
-  tags: TaskTag[];
-  search: string;
-  alertsOnly: boolean;
-}
-
-export interface SavedFilter {
-  id: string;
-  name: string;
-  filters: Omit<BacklogFilters, 'search' | 'alertsOnly'>;
-  createdAt: Date;
-}
-
-export interface AgingBucket {
-  label: string;
-  min: number;
-  max: number;
-  count: number;
-  isCritical: boolean;
-}
-
-export interface BacklogMetrics {
-  total: number;
-  byStatus: Record<TaskStatus, number>;
-  oldestTask: BacklogTask | null;
-  newestTask: BacklogTask | null;
-  tasksWithoutAction: number;
-  criticalAgingCount: number;
-}
-
-export interface BacklogAlerts {
-  staleCount: number;
-  slaBreachedCount: number;
-  noOwnerCount: number;
-  criticalCount: number;
-}
-```
-
----
-
-## 3. MAPEAMENTOS DE STATUS (Regras de cores e labels)
-
-```typescript
-// Configuração de Status
-const statusConfig: Record<TaskStatus, { 
-  label: string; 
-  color: string; 
-  bgColor: string;
-  icon: typeof Circle;
-  description: string;
-}> = {
-  open: { 
-    label: "Aberto", 
-    color: "bg-blue-500", 
-    bgColor: "bg-blue-500/10",
-    icon: Circle,
-    description: "Aguardando início"
-  },
-  in_progress: { 
-    label: "Em Andamento", 
-    color: "bg-amber-500", 
-    bgColor: "bg-amber-500/10",
-    icon: Loader2,
-    description: "Em execução"
-  },
-  pending: { 
-    label: "Pendente", 
-    color: "bg-orange-500", 
-    bgColor: "bg-orange-500/10",
-    icon: Clock,
-    description: "Aguardando resposta"
-  },
-  resolved: { 
-    label: "Resolvido", 
-    color: "bg-green-500", 
-    bgColor: "bg-green-500/10",
-    icon: CheckCircle2,
-    description: "Solução aplicada"
-  },
-  closed: { 
-    label: "Fechado", 
-    color: "bg-gray-400", 
-    bgColor: "bg-gray-400/10",
-    icon: CheckCircle2,
-    description: "Finalizado"
-  },
-};
-
-// Mapeamento de Status GLPI -> Sistema
-const statusNumToString: Record<number, TaskStatus> = {
-  1: 'open',        // Novo
-  2: 'in_progress', // Em análise
-  3: 'in_progress', // Em andamento
-  4: 'pending',     // Aguardando
-  5: 'resolved',    // Resolvido
-  6: 'closed',      // Fechado
-};
-
-// Mapeamento de Prioridade GLPI -> Sistema
-const priorityNumToString: Record<number, TaskPriority> = {
-  1: 'low',    // Muito baixa
-  2: 'low',    // Baixa
-  3: 'normal', // Média
-  4: 'high',   // Alta
-  5: 'urgent', // Muito alta
-  6: 'urgent', // Crítica
-};
-
-// Cores para Badges de Status
-const statusColors: Record<TaskStatus, string> = {
-  open: "bg-blue-100 text-blue-800 border-blue-200",
-  in_progress: "bg-amber-100 text-amber-800 border-amber-200",
-  pending: "bg-orange-100 text-orange-800 border-orange-200",
-  resolved: "bg-green-100 text-green-800 border-green-200",
-  closed: "bg-gray-100 text-gray-800 border-gray-200",
-};
-
-// Cores para Badges de Prioridade
-const priorityColors: Record<TaskPriority, string> = {
-  urgent: "bg-red-100 text-red-800 border-red-200",
-  high: "bg-orange-100 text-orange-800 border-orange-200",
-  normal: "bg-blue-100 text-blue-800 border-blue-200",
-  low: "bg-gray-100 text-gray-800 border-gray-200",
-};
-
-// Tags e suas configurações
-const tagConfig: Record<TaskTag, { label: string; color: string; icon: Icon }> = {
-  critical: { label: "Crítico", color: "text-red-600", icon: Flame },
-  attention: { label: "Atenção", color: "text-amber-600", icon: AlertTriangle },
-  sla_breached: { label: "SLA Estourado", color: "text-purple-600", icon: Clock },
-  dependency: { label: "Dependência", color: "text-blue-600", icon: Link2 },
-  no_owner: { label: "Sem Responsável", color: "text-orange-600", icon: UserX },
-  stale: { label: "Parado", color: "text-gray-500", icon: Clock },
-};
-```
-
----
-
-## 4. REGRAS DE CORES POR TEMPO DE INATIVIDADE
-
-```typescript
-// Função para colorir baseado em dias de inatividade
-const getTimeColor = (days: number) => {
-  if (days > 14) return "text-destructive"; // Vermelho (crítico)
-  if (days > 7) return "text-orange-600";   // Laranja (atenção)
-  if (days > 3) return "text-amber-600";    // Âmbar (alerta leve)
-  return "text-muted-foreground";           // Cinza (normal)
-};
-
-// Regras de destaque de linha na tabela
-const getRowHighlight = (task: BacklogTask) => {
-  if (task.priority === "urgent" || task.tags.includes("critical")) {
-    return "bg-red-50/50 hover:bg-red-50";
-  }
-  if (task.daysSinceLastAction > 15) {
-    return "bg-amber-50/50 hover:bg-amber-50";
-  }
-  if (task.isSlaBreach) {
-    return "bg-purple-50/50 hover:bg-purple-50";
-  }
-  return "";
-};
-
-// Regras para tags automáticas
-const generateTags = (task, daysSinceLastAction, priority) => {
-  const tags: TaskTag[] = [];
-  if (daysSinceLastAction > 7) tags.push('stale');
-  if (priority >= 5) tags.push('critical');
-  if (daysSinceLastAction > 14) tags.push('attention');
-  return tags;
-};
-```
-
----
-
-## 5. CONFIGURAÇÃO DO SUPABASE (Secrets necessários)
+### 3.1 Tipos Principais (TypeScript)
 
 ```text
-Secrets necessários no Supabase:
-- GLPI_API_URL: URL base da API do GLPI (ex: https://glpi.empresa.com)
-- GLPI_APP_TOKEN: Token de aplicação do GLPI
-- GLPI_USER_TOKEN: Token de usuário do GLPI
-- SUPABASE_URL: URL do projeto Supabase
-- SUPABASE_SERVICE_ROLE_KEY: Chave de service role
+TaskStatus: "open" | "in_progress" | "pending" | "resolved" | "closed"
+TaskPriority: "urgent" | "high" | "normal" | "low"
+TaskType: "incident" | "request" | "problem" | "change"
+TaskTag: "critical" | "attention" | "sla_breached" | "dependency" | "no_owner" | "stale"
 ```
 
----
+### 3.2 Interface BacklogTask
 
-## 6. SCHEMA DO BANCO DE DADOS (SQL)
+| Campo | Tipo | Descricao |
+|-------|------|-----------|
+| id | string | Identificador (GLPI-XXX) |
+| title | string | Titulo limpo do ticket |
+| status | TaskStatus | Status atual |
+| priority | TaskPriority | Prioridade |
+| type | TaskType | Tipo do chamado |
+| assignee | string | Responsavel atribuido |
+| squad | string | Squad/equipe |
+| client | string | Cliente |
+| sector | string | Setor |
+| product | string | Produto |
+| tags | TaskTag[] | Tags automaticas |
+| openedAt | Date | Data de abertura |
+| lastUpdatedAt | Date | Ultima atualizacao |
+| daysSinceLastAction | number | Dias sem acao |
+| slaDeadline | Date | Prazo SLA |
+| isSlaBreach | boolean | Violou SLA |
 
-```sql
--- Tabela de tickets do GLPI
-CREATE TABLE public.glpi_tickets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  glpi_id INTEGER NOT NULL UNIQUE,
-  title TEXT NOT NULL,
-  description TEXT,
-  status INTEGER NOT NULL DEFAULT 1,
-  priority INTEGER NOT NULL DEFAULT 3,
-  sector TEXT,
-  product TEXT,
-  client TEXT,
-  requester TEXT,
-  assigned_to TEXT,
-  category TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  due_date TIMESTAMPTZ,
-  glpi_created_at TIMESTAMPTZ,
-  glpi_updated_at TIMESTAMPTZ
-);
+### 3.3 Schema do Banco de Dados
 
--- Tabela de histórico de sincronização
-CREATE TABLE public.glpi_sync_history (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  success BOOLEAN NOT NULL DEFAULT true,
-  tickets_count INTEGER DEFAULT 0,
-  error_message TEXT,
-  duration_ms INTEGER
-);
-
--- RLS Policies
-ALTER TABLE public.glpi_tickets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.glpi_sync_history ENABLE ROW LEVEL SECURITY;
-
--- Tickets visíveis para todos (SELECT)
-CREATE POLICY "Tickets são visíveis para todos" 
-  ON public.glpi_tickets FOR SELECT USING (true);
-
--- Service role pode gerenciar tickets (ALL)
-CREATE POLICY "Service role pode gerenciar tickets" 
-  ON public.glpi_tickets FOR ALL 
-  USING (auth.role() = 'service_role')
-  WITH CHECK (auth.role() = 'service_role');
-
--- Histórico visível para todos (SELECT)
-CREATE POLICY "Histórico visível para todos" 
-  ON public.glpi_sync_history FOR SELECT USING (true);
-
--- Service role pode inserir histórico (INSERT)
-CREATE POLICY "Service role pode inserir histórico" 
-  ON public.glpi_sync_history FOR INSERT 
-  WITH CHECK (auth.role() = 'service_role');
-
--- Trigger para atualizar updated_at
-CREATE OR REPLACE FUNCTION public.update_glpi_tickets_updated_at()
-RETURNS trigger LANGUAGE plpgsql SET search_path TO 'public' AS $$
-BEGIN
-  NEW.updated_at = now();
-  RETURN NEW;
-END;
-$$;
-
-CREATE TRIGGER update_glpi_tickets_updated_at
-  BEFORE UPDATE ON public.glpi_tickets
-  FOR EACH ROW EXECUTE FUNCTION update_glpi_tickets_updated_at();
-```
+**Tabela: glpi_tickets**
+| Coluna | Tipo | Descricao |
+|--------|------|-----------|
+| id | UUID | Chave primaria |
+| glpi_id | INTEGER | ID unico do GLPI |
+| title | TEXT | Titulo |
+| description | TEXT | Descricao |
+| status | INTEGER | Codigo status GLPI (1-6) |
+| priority | INTEGER | Codigo prioridade (1-6) |
+| sector | TEXT | Setor extraido |
+| product | TEXT | Produto extraido |
+| client | TEXT | Cliente |
+| requester | TEXT | Solicitante |
+| assigned_to | TEXT | Responsavel |
+| category | TEXT | Categoria |
+| glpi_created_at | TIMESTAMPTZ | Data criacao GLPI |
+| glpi_updated_at | TIMESTAMPTZ | Data atualizacao GLPI |
 
 ---
 
-## 7. EDGE FUNCTION GLPI-TICKETS
+## 4. Regras de Negocio
 
-Ver arquivo completo: `supabase/functions/glpi-tickets/index.ts`
+### 4.1 Mapeamento de Status (GLPI -> Sistema)
 
-Principais funcionalidades:
-- Inicia sessão no GLPI via API REST
-- Busca tickets com expand_dropdowns
-- Busca histórico/followups dos tickets
-- Parseia títulos para extrair Setor, Produto e Cliente
-- Salva no banco via upsert
-- Registra histórico de sincronização
+| Codigo GLPI | Nome GLPI | Status Sistema |
+|-------------|-----------|----------------|
+| 1 | Novo | open |
+| 2 | Em analise | in_progress |
+| 3 | Em andamento | in_progress |
+| 4 | Aguardando | pending |
+| 5 | Resolvido | resolved |
+| 6 | Fechado | closed |
+
+### 4.2 Mapeamento de Prioridade
+
+| Codigo GLPI | Nome GLPI | Prioridade Sistema |
+|-------------|-----------|-------------------|
+| 1-2 | Muito baixa/Baixa | low |
+| 3 | Media | normal |
+| 4 | Alta | high |
+| 5-6 | Muito alta/Critica | urgent |
+
+### 4.3 Regras de Tags Automaticas
+
+| Tag | Condicao de Ativacao |
+|-----|---------------------|
+| stale | Dias sem acao > 7 |
+| critical | Prioridade GLPI >= 5 |
+| attention | Dias sem acao > 14 |
+| no_owner | Sem responsavel atribuido |
+| sla_breached | Dias sem acao > 5 |
+
+### 4.4 Regras de Destaque Visual (Cores)
+
+**Por Tempo de Inatividade:**
+| Dias | Cor | Significado |
+|------|-----|-------------|
+| > 14 | Vermelho (text-destructive) | Critico |
+| > 7 | Laranja (text-orange-600) | Atencao |
+| > 3 | Ambar (text-amber-600) | Alerta leve |
+| <= 3 | Cinza (text-muted-foreground) | Normal |
+
+**Destaque de Linha na Tabela:**
+| Condicao | Cor de Fundo |
+|----------|--------------|
+| Prioridade urgente ou tag critical | bg-red-50/50 |
+| Dias sem acao > 15 | bg-amber-50/50 |
+| Violacao SLA | bg-purple-50/50 |
 
 ---
 
-## 8. HOOK useBacklogData (Lógica Central)
+## 5. Funcionalidades por Modulo
 
-Ver arquivo completo: `src/hooks/useBacklogData.ts`
+### 5.1 Pagina Backlog (Produtos.tsx)
 
-Funcionalidades:
-- Fetch de tickets do banco
-- Conversão de ticket GLPI -> BacklogTask
-- Sincronização com GLPI via Edge Function
-- Filtros avançados (status, prioridade, datas, etc.)
-- Ordenação primária e secundária
-- Paginação
-- Cálculo de métricas e alertas
-- Buckets de aging
-- Timeline de aberturas (30 dias)
-- Exportação para CSV/XLS
-- Filtros salvos (localStorage)
+**Vistas Disponiveis:**
+- **Tabela**: Lista paginada com ordenacao por colunas
+- **Kanban**: Colunas por status/agrupamento
+- **Resumo**: Dashboard com agrupamentos e metricas
 
----
+**Recursos:**
+- Agrupamento por: Status, Setor, Cliente, Responsavel
+- Filtros avancados com salvamento
+- Exportacao para CSV/XLS
+- Cards colapsaveis estilo ClickUp
+- Clique na tarefa abre painel lateral de detalhes
 
-## 9. COMPONENTES DE INTERFACE
+**Graficos:**
+- StatusChart: Barras por status (clicavel para filtrar)
+- AgingChart: Tempo sem acao (buckets 0-3d, 4-7d, 8-15d, >15d)
+- TimelineChart: Aberturas nos ultimos 30 dias
 
-### 9.1 BacklogTable
-- Tabela com linhas expansíveis (Collapsible)
-- Ordenação por coluna
-- Paginação configurável (15/25/50/100)
-- Botão de exportação
-- Clique abre TaskDetailSheet
-- Cores de destaque por criticidade
+### 5.2 Pagina Responsaveis
 
-### 9.2 BacklogFilters
-- Busca global (ID, título, cliente, responsável)
-- Filtros de data (início/fim com Calendar)
-- Multi-select dropdowns para cada campo
-- Tags clicáveis
-- Chips de filtros ativos com remoção
-- Salvar/carregar filtros
+**Foco:** Gestao individual por analista
 
-### 9.3 TaskDetailSheet
-- Sheet lateral com detalhes
-- Grid de informações (responsável, cliente, setor)
+**Recursos:**
+- Agrupamento padrao por responsavel
+- Cards com avatar e estatisticas por pessoa
+- Metricas exibidas: tarefas paradas (>7d), media de dias inativos
+- Filtros por Status, Responsavel, Setor, Cliente
+- Vista Lista ou Board
+
+### 5.3 Pagina Status
+
+**Foco:** Visao por estado do chamado
+
+**Recursos:**
+- Cards de resumo no topo com contagem e percentual por status
+- Agrupamento padrao por status
+- Ordem fixa: Aberto -> Em Andamento -> Pendente -> Resolvido -> Fechado
+- Cards colapsaveis com tabelas internas
+- Vista Lista ou Board
+
+### 5.4 Painel de Detalhes (TaskDetailSheet)
+
+**Informacoes Exibidas:**
+- ID e titulo do ticket
+- Badges de status, prioridade e tags
+- Grid: Responsavel, Cliente, Setor, Dias parado
 - Datas formatadas em pt-BR
-- Descrição parseada (HTML -> texto)
-- Histórico de acompanhamentos
-
-### 9.4 Gráficos (Recharts)
-- StatusChart: Barras por status, clicável
-- AgingChart: Tempo sem ação (normal/crítico)
-- TimelineChart: Área de aberturas por dia
-
-### 9.5 OperationalAlerts
-- Cards com métricas: Total, Críticas, Paradas, SLA, Sem Responsável
-- Botão para filtrar apenas alertas
-
-### 9.6 SummaryDashboard
-- Agrupamento por Setor, Produto, Responsável, Status
-- Barras de progresso por status
-- Cards com contagens
+- Descricao limpa (HTML parseado)
+- Historico de acompanhamentos (ITILFollowups)
 
 ---
 
-## 10. PÁGINAS PRINCIPAIS
+## 6. Componentes de Interface
 
-### 10.1 Auth.tsx
-- Login/Cadastro com tabs
-- Seleção de produto obrigatória
-- Validação com Zod
-- Integração com Supabase Auth
+### 6.1 BacklogTable
+- Tabela com linhas expansiveis (Collapsible)
+- 12 colunas: ID, Descricao, Status, Prior., Setor, Produto, Cliente, Responsavel, Abertura, Dias, Tags
+- Paginacao configuravel (15/25/50/100)
+- Ordenacao por clique no cabecalho
+- Botao de exportacao
 
-### 10.2 Produtos.tsx (Backlog)
-- Três vistas: Tabela, Kanban, Resumo
-- Agrupamento por: nenhum, status, setor, cliente, responsável
-- Filtros e gráficos
+### 6.2 BacklogFilters
+- Busca global (ID, titulo, cliente, responsavel)
+- Seletores de data inicio/fim com calendario
+- Multi-select dropdowns para cada campo
+- Tags clicaveis para filtrar
+- Chips de filtros ativos com botao X para remover
+- Funcionalidade de salvar/carregar filtros (localStorage)
 
-### 10.3 Responsaveis.tsx
-- Vista por responsável
-- Cards colapsáveis estilo ClickUp
-- Estatísticas: tarefas paradas, média de dias
+### 6.3 OperationalAlerts (Indicadores)
+- 5 cards de metricas:
+  - Total em Aberto
+  - Criticas
+  - Paradas >7d
+  - SLA Estourado
+  - Sem Responsavel
+- Botao para filtrar apenas itens com alertas
 
-### 10.4 Status.tsx
-- Cards de resumo por status no topo
-- Cards colapsáveis com tabelas internas
-- Vista Kanban alternativa
+### 6.4 Graficos
+
+**StatusChart:**
+- Tipo: Barras verticais
+- Cores por status
+- Clicavel: filtra ao clicar na barra
+
+**AgingChart:**
+- Tipo: Barras verticais
+- Buckets: 0-3d, 4-7d, 8-15d, >15d
+- Cores: Azul (normal), Vermelho (critico para >7d)
+
+**TimelineChart:**
+- Tipo: Area
+- Dados: Aberturas diarias dos ultimos 30 dias
 
 ---
 
-## 11. DEPENDÊNCIAS NECESSÁRIAS
+## 7. Integracao GLPI
 
-```json
-{
-  "@supabase/supabase-js": "^2.90.1",
-  "@tanstack/react-query": "^5.83.0",
-  "@radix-ui/react-collapsible": "^1.1.11",
-  "@radix-ui/react-dialog": "^1.1.14",
-  "@radix-ui/react-popover": "^1.1.14",
-  "@radix-ui/react-scroll-area": "^1.2.9",
-  "@radix-ui/react-select": "^2.2.5",
-  "@radix-ui/react-tabs": "^1.1.12",
-  "@radix-ui/react-checkbox": "^1.3.2",
-  "date-fns": "^3.6.0",
-  "recharts": "^2.15.4",
-  "sonner": "^1.7.4",
-  "lucide-react": "^0.462.0",
-  "zod": "^3.25.76",
-  "react-router-dom": "^6.30.1"
-}
+### 7.1 Edge Function: glpi-tickets
+
+**Fluxo de Execucao:**
+1. Inicia sessao no GLPI via API REST
+2. Busca ate 200 tickets (expand_dropdowns=true)
+3. Para os 50 primeiros, busca ITILFollowups (historico)
+4. Parseia titulos para extrair Setor, Produto, Cliente
+5. Limpa descricoes (remove HTML, extrai apos "Descricao:")
+6. Salva no banco via upsert (onConflict: glpi_id)
+7. Registra historico de sincronizacao
+8. Encerra sessao no GLPI
+
+**Parsing de Titulo:**
+- Formato esperado: "Setor | Produto - [Cliente] - Titulo"
+- Extrai Setor antes do "|"
+- Extrai Produto entre "|" e "-"
+- Extrai Cliente de [CLIENTE]
+- Fallback: busca palavras-chave no conteudo
+
+### 7.2 Credenciais Necessarias (Secrets)
+
+| Secret | Descricao |
+|--------|-----------|
+| GLPI_API_URL | URL base (ex: https://glpi.empresa.com) |
+| GLPI_APP_TOKEN | Token de aplicacao |
+| GLPI_USER_TOKEN | Token de usuario |
+
+---
+
+## 8. Fluxo de Dados
+
+```text
+1. Usuario acessa a aplicacao
+          |
+          v
+2. useBacklogData() busca dados do Supabase
+          |
+          v
+3. Se banco vazio, chama syncWithGLPI()
+          |
+          v
+4. Edge Function busca do GLPI e salva no DB
+          |
+          v
+5. Hook processa dados: filtros, ordenacao, metricas
+          |
+          v
+6. Componentes renderizam as diferentes visoes
+          |
+          v
+7. Usuario interage: filtra, ordena, expande, exporta
+          |
+          v
+8. Botao "Atualizar" dispara nova sincronizacao
 ```
 
 ---
 
-## 12. PASSOS PARA MIGRAÇÃO
+## 9. Metricas Calculadas
 
-1. Copiar `src/types/index.ts` para o novo projeto
-2. Configurar Supabase/Cloud com as tabelas SQL
-3. Adicionar secrets: GLPI_API_URL, GLPI_APP_TOKEN, GLPI_USER_TOKEN
-4. Copiar a Edge Function `glpi-tickets`
-5. Copiar hooks: useAuth, useBacklogData
-6. Copiar componentes do backlog
-7. Copiar páginas: Auth, Produtos, Responsaveis, Status
-8. Copiar AppLayout
-9. Configurar rotas no App.tsx
-10. Instalar dependências faltantes
+### 9.1 BacklogMetrics
+- **total**: Total de tarefas
+- **byStatus**: Contagem por status
+- **oldestTask**: Tarefa mais antiga aberta
+- **newestTask**: Tarefa mais recente
+- **tasksWithoutAction**: Tarefas paradas >7 dias
+- **criticalAgingCount**: Tarefas paradas >15 dias
+
+### 9.2 BacklogAlerts
+- **staleCount**: Tarefas paradas >7 dias
+- **slaBreachedCount**: Tarefas com SLA estourado
+- **noOwnerCount**: Tarefas sem responsavel
+- **criticalCount**: Tarefas com tag critical
+
+### 9.3 AgingBuckets
+| Bucket | Faixa | Criticidade |
+|--------|-------|-------------|
+| 0-3 dias | 0-3 | Normal |
+| 4-7 dias | 4-7 | Normal |
+| 8-15 dias | 8-15 | Critico |
+| >15 dias | 16+ | Critico |
+
+---
+
+## 10. Navegacao e Layout
+
+### 10.1 Header (AppLayout)
+
+**Menu Principal:**
+- Backlog (/produtos)
+- Responsaveis (/responsaveis)
+- Status (/status)
+- Roadmap (/roadmap)
+- Sprint (/sprint)
+- Indicadores (/dashboard-executivo)
+
+**Area Direita:**
+- Botao de sincronizacao com indicador de loading
+- Timestamp da ultima atualizacao
+- Menu do usuario (Configuracoes, Sair)
+
+### 10.2 Autenticacao
+- Login/Cadastro via Supabase Auth
+- Redirecionamento automatico para /auth se nao logado
+- Protecao de rotas no AppLayout
+
+---
+
+## 11. Exportacao de Dados
+
+### 11.1 Formato CSV (compativel Excel)
+- Separador: ponto-e-virgula (;)
+- Encoding: UTF-8 com BOM
+- Colunas: ID, Descricao, Status, Prioridade, Cliente, Responsavel, Setor, Data Abertura, Ultima Atualizacao, Dias sem Acao, Tags
+
+### 11.2 Nomenclatura do Arquivo
+```text
+backlog_YYYY-MM-DD_HH-mm.csv
+```
+
+---
+
+## 12. Responsividade
+
+### 12.1 Breakpoints
+| Tamanho | Comportamento |
+|---------|---------------|
+| Mobile (<640px) | Menu compacto, tabelas com scroll horizontal |
+| Tablet (640-1024px) | Layout adaptado, alguns textos ocultos |
+| Desktop (>1024px) | Layout completo, todas as colunas visiveis |
+
+### 12.2 Adaptacoes Mobile
+- Labels do menu ocultados (so icones)
+- Tabelas com scroll horizontal
+- Filtros em dropdowns colapsaveis
+- Cards em grid de 1-2 colunas
+
+---
+
+## 13. Dependencias Principais
+
+```text
+@supabase/supabase-js: ^2.90.1
+@tanstack/react-query: ^5.83.0
+@radix-ui/react-*: Componentes UI acessiveis
+recharts: ^2.15.4 - Graficos
+date-fns: ^3.6.0 - Manipulacao de datas
+lucide-react: ^0.462.0 - Icones
+sonner: ^1.7.4 - Notificacoes toast
+zod: ^3.25.76 - Validacao de schemas
+react-router-dom: ^6.30.1 - Navegacao
+```
+
+---
+
+## 14. Proximos Passos Sugeridos
+
+1. **Sincronizacao Automatica**: Implementar cron job para sincronizar a cada X minutos
+2. **Notificacoes em Tempo Real**: Alertas via Supabase Realtime
+3. **Relatorios Personalizados**: Exportacao em PDF com graficos
+4. **Filtros por Periodo Predefinido**: Hoje, Semana, Mes
+5. **Historico de Acoes**: Timeline completa de cada ticket
+6. **Integracao com ClickUp**: Sincronizacao bidirecional
+7. **Dashboard Executivo**: KPIs e indicadores gerenciais
+8. **Multi-produto**: Suporte a multiplos produtos/workspaces
